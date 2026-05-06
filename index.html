@@ -109,7 +109,7 @@ video{width:100%;height:100%;object-fit:cover;display:none;}
   <header>
     <div class="logo">てのひら 🤲</div>
     <div style="display:flex;align-items:center;gap:8px;">
-      <span class="badge">v20260506-ECO</span>
+      <span class="badge">v20260506-VOICE</span>
       <div class="status" id="dot"></div>
     </div>
   </header>
@@ -242,6 +242,150 @@ window.addEventListener('load', () => {
 });
 
 
+
+
+// ===== 包括的音声コマンドエンジン =====
+const VOICE_COMMANDS = [
+  // ナビゲーション
+  { p:/ホーム|最初の画面|トップ/,          fn: () => goTab(1, 'home', 'ホーム画面に移動しました') },
+  { p:/カメラ(を開|タブ|画面)/,            fn: () => goTabCam() },
+  { p:/AI|アシスタント(を開|タブ|画面)/,   fn: () => goTab(3, 'ai', 'AIアシスタント画面に移動しました') },
+
+  // GPS・位置情報
+  { p:/GPS.*更新|位置.*更新|現在地.*更新/, fn: () => { speak('現在地を更新します'); stopGPSWatch(); startGPSWatch(); } },
+  { p:/現在地|今の場所|どこにい|場所を教/, fn: () => replyAddr() },
+  { p:/位置.*共有|場所.*送/,               fn: () => { sharePos(); speak('現在地を共有します') } },
+
+  // カメラ操作
+  { p:/カメラ(を起動|オン|開始)/,          fn: () => goTabCam() },
+  { p:/カメラ(を止|オフ|停止)/,            fn: () => { stopCam(); speak('カメラを停止しました') } },
+  { p:/室内.*解析|間取り|部屋.*確認/,      fn: () => goTabCamAnalyze('indoor') },
+  { p:/障害物|段差.*確認|危険.*確認/,      fn: () => goTabCamAnalyze('obstacle') },
+  { p:/出口|避難.*経路/,                   fn: () => goTabCamAnalyze('exit') },
+  { p:/周り.*見て|周囲.*確認|今すぐ.*解析/,fn: () => goTabCamAnalyze('general') },
+
+  // マイク操作
+  { p:/マイク(を止|オフ|停止)/,            fn: () => { stopMic(); speak('マイクを停止しました') } },
+  { p:/マイク(オン|再開|起動)/,            fn: () => { startMic(); resetMicTimer(); speak('マイクを再開しました') } },
+
+  // 電話帳・連絡先
+  { p:/電話帳|連絡先(を開|を見)/,          fn: () => openContacts() },
+  { p:/緊急連絡先(を開|に電話|を呼)/,      fn: () => callEmergencyContact() },
+  { p:/お?母(さん)?.*(電話|連絡)/,         fn: () => callByRel('母') },
+  { p:/お?父(さん)?.*(電話|連絡)/,         fn: () => callByRel('父') },
+  { p:/家族.*(電話|連絡)/,                 fn: () => openContacts() },
+  { p:/かかりつけ.*(電話|連絡)/,           fn: () => callByRel('病院') },
+
+  // 施設検索→Googleマップ起動
+  { p:/病院.*探|近く.*病院/,               fn: () => searchMap('病院 救急') },
+  { p:/トイレ.*探|近く.*トイレ/,           fn: () => searchMap('公共トイレ バリアフリー') },
+  { p:/薬局.*探|近く.*薬/,                 fn: () => searchMap('薬局') },
+  { p:/コンビニ.*探|近く.*コンビニ/,       fn: () => searchMap('コンビニエンスストア') },
+  { p:/駐車場.*探|近く.*駐車/,             fn: () => searchMap('駐車場 障害者') },
+  { p:/駅.*探|近く.*駅/,                   fn: () => searchMap('駅 バリアフリー') },
+  { p:/スーパー.*探|近く.*スーパー/,       fn: () => searchMap('スーパーマーケット') },
+  { p:/ルート|道.*教|案内して/,             fn: () => openMap() },
+
+  // 緊急
+  { p:/119|救急車/,                         fn: () => callNumber('119', '119番に発信します') },
+  { p:/110|警察/,                           fn: () => callNumber('110', '110番に発信します') },
+  { p:/助けて|緊急(事態|です)|倒れ/,       fn: () => emergencyFlow() },
+
+  // 設定・状態
+  { p:/バッテリー|電池/,                    fn: () => reportBattery() },
+  { p:/今の時間|何時/,                      fn: () => reportTime() },
+  { p:/機能.*止|全部.*止|省電力/,           fn: () => { stopAllFeatures(); speak('全機能を停止しました') } },
+  { p:/機能.*再開|再起動/,                  fn: () => startAllFeatures() },
+];
+
+// コマンドマッチング
+function matchVoiceCommand(q) {
+  for (const cmd of VOICE_COMMANDS) {
+    if (cmd.p.test(q)) { cmd.fn(); return true; }
+  }
+  // 電話番号直接指定
+  if (detectAndCall(q)) return true;
+  return false;
+}
+
+// ヘルパー関数
+function goTab(nth, id, msg) {
+  const btn = document.querySelector(`.nb:nth-child(${nth})`);
+  if (btn) setTab(btn, id);
+  if (msg) speak(msg);
+}
+
+async function goTabCam() {
+  goTab(2, 'cam', null);
+  await startCam();
+  speak('カメラを起動しました。解析モードを選んでください。室内解析・障害物確認・出口案内・周囲確認が使えます。');
+}
+
+async function goTabCamAnalyze(mode) {
+  goTab(2, 'cam', null);
+  await startCam();
+  speak('解析します。');
+  setTimeout(() => analyzeRoom(mode), 1500);
+}
+
+function replyAddr() {
+  const ans = addr ? `現在地は${addr}です。` : 'GPSを取得中です。しばらくお待ちください。';
+  addBubble('ai', ans); speak(ans);
+}
+
+function searchMap(query) {
+  speak(`近くの${query.split(' ')[0]}をGoogleマップで検索します。`);
+  setTimeout(() => launchApp('map', {query}), 1000);
+}
+
+function openMap() {
+  speak('Googleマップを開きます。');
+  setTimeout(() => launchApp('map', {query: addr||'現在地'}), 1000);
+}
+
+function callNumber(num, msg) {
+  speak(msg);
+  setTimeout(() => launchApp('call', {number: num}), 1200);
+}
+
+function callByRel(rel) {
+  const c = contacts.find(x => x.rel.includes(rel) || x.name.includes(rel));
+  if (c) selectContact(c.id);
+  else { speak('連絡先が登録されていません。電話帳から登録してください。'); openContacts(); }
+}
+
+function callEmergencyContact() {
+  const ec = contacts.filter(x => x.emergency && x.number);
+  if (ec.length === 0) { speak('緊急連絡先が登録されていません。電話帳から設定してください。'); openContacts(); return; }
+  if (ec.length === 1) { selectContact(ec[0].id); return; }
+  const names = ec.map((c,i)=>`${i+1}番${c.name}`).join('、');
+  speak(`緊急連絡先が${ec.length}件あります。${names}。番号を言ってください。`);
+  voiceSelectMode = true;
+}
+
+async function emergencyFlow() {
+  const msg = `緊急事態ですね。救急は119番、警察は110番です。現在地は${addr||'不明'}です。どちらに連絡しますか？`;
+  addBubble('ai', msg); speak(msg);
+}
+
+async function reportBattery() {
+  if (navigator.getBattery) {
+    const b = await navigator.getBattery();
+    const pct = Math.round(b.level * 100);
+    const charging = b.charging ? '充電中です。' : '';
+    const ans = `バッテリーは${pct}パーセントです。${charging}`;
+    addBubble('ai', ans); speak(ans);
+  } else {
+    speak('バッテリー情報を取得できません。');
+  }
+}
+
+function reportTime() {
+  const now = new Date();
+  const h = now.getHours(), m = now.getMinutes();
+  const ans = `現在の時刻は${h}時${m}分です。`;
+  addBubble('ai', ans); speak(ans);
+}
 
 // ===== 電話帳 =====
 let contacts = JSON.parse(localStorage.getItem('tenohira_contacts') || '[]');
@@ -748,77 +892,9 @@ async function sendMsg(text) {
     if (handleVoiceSelect(q)) { setOrbState('idle'); schedNext(); return; }
   }
 
-  // 電話帳を開く
-  if (/電話帳|連絡先|アドレス帳/.test(q)) {
-    openContacts(); setOrbState('idle'); schedNext(); return;
-  }
-
-  // 家族・知人への電話
-  if (/[お母父兄姉弟妹ばあじい].*電話|電話.*[お母父兄姉弟妹]|家族.*電話|電話.*家族|かかりつけ.*電話/.test(q)) {
-    if (callByVoice(q)) { setOrbState('idle'); schedNext(); return; }
-  }
-
-  // 電話番号直接指定
-  if (detectAndCall(q)) { setOrbState('idle'); schedNext(); return; }
-
-  // 意図判定→スマホアプリ起動
-  const intent = analyzeIntent(q);
-  if (intent) {
-    const handled = await executeIntent(intent, q);
-    if (handled) { setOrbState('idle'); schedNext(); return; }
-  }
-
-  // ホーム画面
-  if (/ホーム|最初|トップ|メイン画面/.test(q)) {
-    const btn = document.querySelector('.nb:nth-child(1)');
-    setTab(btn, 'home');
-    const ans = 'ホーム画面に移動しました。';
-    addBubble('ai', ans); speak(ans); setOrbState('idle'); schedNext(); return;
-  }
-
-  // カメラ起動
-  if (/カメラ|撮影|写真|周りを見て|室内|間取り|障害物/.test(q)) {
-    const btn = document.querySelector('.nb:nth-child(2)');
-    setTab(btn, 'cam');
-    await startCam();
-    let mode = 'general';
-    if (/間取り|室内|部屋/.test(q)) mode = 'indoor';
-    else if (/障害物|段差|危険/.test(q)) mode = 'obstacle';
-    else if (/出口|避難|逃げ/.test(q)) mode = 'exit';
-    const ans = 'カメラを起動して解析します。';
-    addBubble('ai', ans); speak(ans);
-    setTimeout(() => analyzeRoom(mode), 1500);
-    setOrbState('idle'); schedNext(); return;
-  }
-
-  // GPS更新
-  if (/GPS|位置.*更新|現在地.*更新|場所.*更新/.test(q)) {
-    const ans = '現在地を更新します。';
-    addBubble('ai', ans); speak(ans);
-    getGPS();
-    setOrbState('idle'); schedNext(); return;
-  }
-
-  // 現在地
-  if (/現在地|今の場所|どこ|いまどこ|場所を教/.test(q)) {
-    const ans = addr ? `現在地は${addr}です。` : 'GPS位置情報を取得中です。しばらくお待ちください。';
-    addBubble('ai', ans); speak(ans); setOrbState('idle'); schedNext(); return;
-  }
-
-  // 緊急
-  if (/助けて|緊急|SOS|119|救急|倒れ/.test(q)) {
-    const ans = `緊急の場合は119番（救急）または110番（警察）に電話してください。現在地は${addr||'不明'}です。`;
-    addBubble('ai', ans); speak(ans);
-    if (confirm('119番に電話しますか？')) window.location.href = 'tel:119';
-    setOrbState('idle'); schedNext(); return;
-  }
-
-  // 位置共有
-  if (/位置.*共有|場所.*送|現在地.*送/.test(q)) {
-    sharePos();
-    const ans = '現在地のURLを共有します。';
-    addBubble('ai', ans); speak(ans); setOrbState('idle'); schedNext(); return;
-  }
+  // 包括的音声コマンドエンジン
+  const cmdMatched = matchVoiceCommand(q);
+  if (cmdMatched) { setOrbState('idle'); schedNext(); return; }
 
   // ===== GPT APIで回答 =====
   history.push({role:'user', content:q});
