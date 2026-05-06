@@ -116,7 +116,7 @@ video{width:100%;height:100%;object-fit:cover;display:none;}
   <header>
     <div class="logo">マイティ 🎤</div>
     <div style="display:flex;align-items:center;gap:8px;">
-      <span class="badge">MIGHTY-v1.2</span>
+      <span class="badge">MIGHTY-v1.3</span>
       <div class="status" id="dot"></div>
     </div>
   </header>
@@ -308,6 +308,8 @@ const VOICE_COMMANDS = [
   { p:/機能.*止|全部.*止|省電力/,           fn: () => { stopAllFeatures(); speak('全機能を停止しました') } },
   { p:/機能.*再開|再起動/,                  fn: () => startAllFeatures() },
   { p:/ホーム.*追加|アイコン.*追加|インストール/, fn: () => guidePWAInstall() },
+  { p:/連絡先.*削除|削除.*連絡先/,          fn: () => { openContacts(); speak('削除したい連絡先のゴミ箱ボタンをタップしてください。') } },
+  { p:/連絡先.*追加|追加.*連絡先/,          fn: () => { openContacts(); setTimeout(toggleAddForm, 500); speak('新しい連絡先を追加します。') } },
 ];
 
 // コマンドマッチング
@@ -464,12 +466,14 @@ function renderContacts() {
         <div class="contact-num">${c.number || '📝 番号未登録'}</div>
       </div>
       <div class="contact-actions">
-        <button class="c-btn" onclick="selectContact(${c.id})" title="選択">
+        <button class="c-btn" onclick="selectContact(${c.id})" title="連絡">
           ${c.number ? '📞' : '✏️'}
         </button>
-        <button class="c-btn" style="font-size:0.65rem" onclick="toggleEmergency(${c.id})">
+        <button class="c-btn" onclick="toggleEmergency(${c.id})" title="緊急フラグ">
           ${c.emergency ? '🚨' : '☆'}
         </button>
+        <button class="c-btn" onclick="editContact(${c.id})" title="編集">✏️</button>
+        <button class="c-btn" style="color:var(--red);border-color:rgba(248,113,113,0.3)" onclick="deleteContact(${c.id})" title="削除">🗑️</button>
       </div>`;
     list.appendChild(el);
   });
@@ -519,6 +523,35 @@ function doSms() {
   speak(confirmTarget.name + 'にSMSを送ります。');
   launchApp('sms', {number: confirmTarget.number.replace(/[-()\s]/g,''), body});
   closeConfirm(); closeContacts();
+}
+
+// 連絡先編集
+function editContact(id) {
+  const c = contacts.find(x => x.id === id);
+  if (!c) return;
+  const name = prompt('名前:', c.name);
+  if (name === null) return;
+  const rel  = prompt('関係（例：母・父・兄）:', c.rel);
+  if (rel === null) return;
+  const num  = prompt('電話番号:', c.number);
+  if (num === null) return;
+  c.name = name || c.name;
+  c.rel  = rel  || c.rel;
+  c.number = num;
+  saveContacts();
+  renderContacts();
+  speak(c.name + 'の情報を更新しました。');
+}
+
+// 連絡先削除
+function deleteContact(id) {
+  const c = contacts.find(x => x.id === id);
+  if (!c) return;
+  if (!confirm(`「${c.name}」を削除しますか？`)) return;
+  contacts = contacts.filter(x => x.id !== id);
+  saveContacts();
+  renderContacts();
+  speak(c.name + 'を削除しました。');
 }
 
 // 緊急フラグ切替
