@@ -1,0 +1,1535 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<!-- version: mock-20260506-stable -->
+<title>てのひら — 生活支援アシスタント</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&family=DM+Serif+Display&display=swap');
+  :root {
+    --bg:#0a0f1e;--surface:#111827;--card:#1a2540;
+    --accent:#38bdf8;--accent2:#818cf8;--green:#34d399;
+    --red:#f87171;--yellow:#fbbf24;--text:#e2e8f0;
+    --muted:#64748b;--border:rgba(56,189,248,0.15);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
+  body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+    background:radial-gradient(ellipse 80% 50% at 20% 10%,rgba(56,189,248,0.08) 0%,transparent 60%),
+               radial-gradient(ellipse 60% 40% at 80% 90%,rgba(129,140,248,0.07) 0%,transparent 60%);}
+
+  .app{position:relative;z-index:1;max-width:480px;margin:0 auto;padding:0 0 110px;}
+
+  /* ヘッダー */
+  header{padding:14px 20px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);}
+  .logo{font-family:'DM Serif Display',serif;font-size:1.45rem;color:var(--accent);}
+  .logo span{color:var(--text);font-size:0.76rem;font-family:'Noto Sans JP',sans-serif;display:block;font-weight:300;}
+  .header-right{display:flex;align-items:center;gap:8px;}
+  .mock-badge{padding:3px 8px;background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.3);border-radius:12px;font-size:0.65rem;color:var(--yellow);}
+  .status-dot{width:9px;height:9px;border-radius:50%;background:var(--muted);box-shadow:0 0 0 3px rgba(100,116,139,0.2);transition:all 0.3s;}
+  .status-dot.active{background:var(--green);box-shadow:0 0 0 4px rgba(52,211,153,0.25);animation:pulse 2s infinite;}
+  .status-dot.listen{background:var(--accent);box-shadow:0 0 0 8px rgba(56,189,248,0.2);animation:pulse 1s infinite;}
+  @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
+
+  /* タブ */
+  .tab-view{display:none;}.tab-view.active{display:block;}
+
+  /* カード */
+  .card{margin:12px 20px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px;position:relative;overflow:hidden;}
+  .card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent),var(--accent2));}
+  .label{font-size:0.66rem;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px;}
+
+  /* 位置情報 */
+  .location-text{font-size:0.95rem;line-height:1.5;min-height:1.4em;}
+  .location-coords{font-size:0.68rem;color:var(--muted);margin-top:4px;font-family:monospace;}
+  .row{display:flex;gap:6px;margin-top:10px;}
+  .btn-sm{flex:1;padding:7px 8px;border-radius:8px;border:1px solid var(--border);background:rgba(56,189,248,0.08);color:var(--accent);font-size:0.72rem;font-family:inherit;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:3px;}
+  .btn-sm:hover{background:rgba(56,189,248,0.18);}
+  .btn-sm:active{transform:scale(0.96);}
+  .btn-sm.danger{color:var(--red);border-color:rgba(248,113,113,0.3);background:rgba(248,113,113,0.08);}
+
+  /* マップ（モック） */
+  .map-wrap{margin:0 20px 12px;border-radius:16px;overflow:hidden;border:1px solid var(--border);height:240px;background:var(--surface);position:relative;}
+  .mock-map{width:100%;height:100%;position:relative;overflow:hidden;}
+  .mock-map svg{width:100%;height:100%;}
+  .map-controls{position:absolute;top:8px;right:8px;display:flex;flex-direction:column;gap:4px;}
+  .map-ctrl-btn{width:28px;height:28px;background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9rem;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .map-zoom{font-size:0.65rem;color:var(--muted);text-align:center;padding:2px 0;}
+  .my-pos{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;}
+  .pos-dot{width:14px;height:14px;background:var(--accent);border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 8px rgba(56,189,248,0.2);animation:posAnim 2s ease-in-out infinite;}
+  @keyframes posAnim{0%,100%{box-shadow:0 0 0 4px rgba(56,189,248,0.25)}50%{box-shadow:0 0 0 12px rgba(56,189,248,0.1)}}
+
+  /* ルートパネル */
+  .route-panel{display:none;}
+  .route-panel.active{display:block;}
+  .route-step{display:flex;gap:8px;align-items:flex-start;padding:8px 10px;background:var(--surface);border-radius:8px;font-size:0.78rem;margin-bottom:5px;}
+  .route-step-dist{font-size:0.68rem;color:var(--accent);margin-top:2px;}
+
+  /* 施設検索 */
+  .search-bar{margin:0 20px 8px;display:flex;gap:6px;}
+  .search-input{flex:1;padding:9px 12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:0.82rem;font-family:inherit;}
+  .search-input:focus{outline:none;border-color:var(--accent);}
+  .search-btn{padding:9px 14px;background:var(--accent);color:#000;border:none;border-radius:10px;font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer;}
+  .cat-chips{display:flex;gap:5px;margin:0 20px 10px;overflow-x:auto;padding-bottom:2px;}
+  .cat-chip{padding:5px 11px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:0.72rem;white-space:nowrap;cursor:pointer;transition:all 0.2s;font-family:inherit;}
+  .cat-chip.active{border-color:var(--accent);color:var(--accent);background:rgba(56,189,248,0.1);}
+  .places-list{margin:0 20px;display:flex;flex-direction:column;gap:7px;}
+  .place-item{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:11px 13px;display:flex;align-items:flex-start;gap:10px;cursor:pointer;transition:all 0.2s;}
+  .place-item:hover{border-color:rgba(56,189,248,0.4);transform:translateX(2px);}
+  .pi{font-size:1.5rem;flex-shrink:0;}
+  .pc{flex:1;min-width:0;}
+  .pn{font-size:0.85rem;font-weight:700;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .pa{font-size:0.72rem;color:var(--muted);}
+  .pm{display:flex;gap:6px;margin-top:3px;align-items:center;flex-wrap:wrap;}
+  .pd{font-size:0.7rem;color:var(--accent);}
+  .pr{font-size:0.7rem;color:var(--yellow);}
+  .po{font-size:0.68rem;padding:1px 5px;border-radius:3px;}
+  .po.op{background:rgba(52,211,153,0.15);color:var(--green);}
+  .po.cl{background:rgba(248,113,113,0.15);color:var(--red);}
+  .pact{display:flex;flex-direction:column;gap:3px;}
+  .nav-btn2{padding:4px 8px;background:rgba(56,189,248,0.1);border:1px solid var(--border);border-radius:6px;color:var(--accent);font-size:0.7rem;cursor:pointer;font-family:inherit;white-space:nowrap;}
+  .empty{text-align:center;padding:20px;color:var(--muted);font-size:0.82rem;}
+
+  /* カメラ */
+  .cam-wrap{margin:0 20px 10px;border-radius:16px;overflow:hidden;border:1px solid var(--border);aspect-ratio:4/3;background:#000;display:flex;align-items:center;justify-content:center;position:relative;}
+  #camVideo{width:100%;height:100%;object-fit:cover;display:none;}
+  .cam-ph{display:flex;flex-direction:column;align-items:center;gap:7px;color:var(--muted);font-size:0.8rem;}
+  .sf{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:65%;aspect-ratio:1;border:2px solid rgba(56,189,248,0.5);border-radius:12px;display:none;pointer-events:none;}
+  .sf.on{display:block;}
+  .sf::before,.sf::after{content:'';position:absolute;width:18px;height:18px;border-color:var(--accent);border-style:solid;}
+  .sf::before{top:-2px;left:-2px;border-width:2px 0 0 2px;border-radius:4px 0 0 0;}
+  .sf::after{bottom:-2px;right:-2px;border-width:0 2px 2px 0;border-radius:0 0 4px 0;}
+  .sl{position:absolute;width:100%;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);animation:sm 2s ease-in-out infinite;display:none;}
+  .sl.on{display:block;}
+  @keyframes sm{0%{top:0}100%{top:100%}}
+  .cam-btns{margin:0 20px 10px;display:flex;gap:6px;}
+  .at{font-size:0.86rem;line-height:1.7;}
+  .at.loading{color:var(--muted);animation:blink 1s infinite;}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:0.4}}
+
+  /* 音声 */
+  .voice-section{margin:0 20px 12px;display:flex;flex-direction:column;align-items:center;gap:9px;}
+  .vbtn{width:74px;height:74px;border-radius:50%;border:2px solid var(--accent);background:rgba(56,189,248,0.1);color:var(--accent);font-size:1.8rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;}
+  .vbtn.on{background:rgba(56,189,248,0.2);animation:vp 1s ease-in-out infinite;}
+  @keyframes vp{0%,100%{box-shadow:0 0 0 8px rgba(56,189,248,0.15),0 0 0 20px rgba(56,189,248,0.05)}50%{box-shadow:0 0 0 16px rgba(56,189,248,0.2),0 0 0 32px rgba(56,189,248,0.05)}}
+  .vs{font-size:0.8rem;color:var(--muted);}
+  .vt{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:9px 13px;font-size:0.8rem;min-height:40px;color:var(--text);line-height:1.5;}
+
+  /* コマンドチップ */
+  .cmd-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
+  .cmd-chip{padding:6px 9px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:0.74rem;color:var(--text);cursor:pointer;transition:all 0.2s;display:flex;align-items:center;gap:4px;font-family:inherit;}
+  .cmd-chip:hover{border-color:var(--accent);color:var(--accent);background:rgba(56,189,248,0.05);}
+
+  /* ナビ */
+  .nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:rgba(10,15,30,0.95);backdrop-filter:blur(20px);border-top:1px solid var(--border);display:flex;z-index:100;}
+  .nb{flex:1;padding:9px 6px;background:none;border:none;color:var(--muted);font-size:0.6rem;font-family:inherit;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;transition:color 0.2s;}
+  .nb.active{color:var(--accent);}
+  .ni{font-size:1.15rem;}
+
+  /* トースト */
+  .toast{position:fixed;top:14px;left:50%;transform:translateX(-50%) translateY(-80px);background:var(--card);border:1px solid var(--border);border-radius:20px;padding:8px 16px;font-size:0.8rem;transition:transform 0.4s cubic-bezier(0.34,1.56,0.64,1);z-index:9998;white-space:nowrap;}
+  .toast.show{transform:translateX(-50%) translateY(0);}
+
+  canvas{display:none;}
+
+  /* ===== 設定タブ ===== */
+  .setting-section{margin:12px 20px;}
+  .setting-title{font-size:0.7rem;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;}
+  .setting-row{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:8px;}
+  .setting-label{font-size:0.88rem;}
+  .setting-sub{font-size:0.72rem;color:var(--muted);margin-top:2px;}
+  .setting-control{display:flex;align-items:center;gap:8px;}
+  .seg-btn{padding:5px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:0.76rem;font-family:inherit;cursor:pointer;transition:all 0.2s;}
+  .seg-btn.active{background:var(--accent);color:#000;border-color:var(--accent);font-weight:700;}
+  .slider-wrap{display:flex;align-items:center;gap:8px;width:160px;}
+  .slider-wrap input[type=range]{flex:1;accent-color:var(--accent);}
+  .slider-val{font-size:0.76rem;color:var(--accent);min-width:28px;text-align:right;}
+  .voice-preview-btn{width:100%;padding:10px;background:rgba(56,189,248,0.1);border:1px solid var(--border);border-radius:10px;color:var(--accent);font-family:inherit;font-size:0.84rem;cursor:pointer;margin-top:4px;}
+  .voice-select{width:100%;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:inherit;font-size:0.82rem;margin-top:6px;}
+
+  /* ===== AIアシスタントタブ ===== */
+  .ai-hero{margin:12px 20px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;text-align:center;position:relative;overflow:hidden;}
+  .ai-hero::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent2),var(--accent));}
+  .ai-orb{width:80px;height:80px;border-radius:50%;margin:0 auto 12px;background:radial-gradient(circle at 35% 35%,var(--accent2),#3730a3);display:flex;align-items:center;justify-content:center;font-size:2rem;position:relative;cursor:pointer;transition:all 0.3s;}
+  .ai-orb::after{content:'';position:absolute;inset:-4px;border-radius:50%;border:2px solid var(--accent2);opacity:0.4;}
+  .ai-orb.speaking{animation:orbPulse 1s ease-in-out infinite;box-shadow:0 0 30px rgba(129,140,248,0.5);}
+  .ai-orb.listening{animation:orbPulse 0.6s ease-in-out infinite;box-shadow:0 0 30px rgba(56,189,248,0.5);background:radial-gradient(circle at 35% 35%,var(--accent),#0369a1);}
+  @keyframes orbPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+  .ai-status{font-size:0.8rem;color:var(--muted);margin-bottom:4px;}
+  .ai-hint{font-size:0.72rem;color:var(--muted);opacity:0.6;}
+  .chat-log{margin:0 20px 12px;display:flex;flex-direction:column;gap:8px;max-height:340px;overflow-y:auto;}
+  .bubble{padding:10px 14px;border-radius:14px;font-size:0.84rem;line-height:1.6;max-width:88%;position:relative;animation:bubbleIn 0.3s ease;}
+  @keyframes bubbleIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+  .bubble.user{background:rgba(56,189,248,0.15);border:1px solid rgba(56,189,248,0.25);align-self:flex-end;border-bottom-right-radius:4px;}
+  .bubble.ai{background:rgba(129,140,248,0.12);border:1px solid rgba(129,140,248,0.2);align-self:flex-start;border-bottom-left-radius:4px;}
+  .bubble.ai::before{content:'🤖';font-size:0.7rem;display:block;margin-bottom:3px;opacity:0.6;}
+  .bubble.user::after{content:'🎤';font-size:0.7rem;display:block;text-align:right;margin-top:3px;opacity:0.6;}
+  .bubble.loading{color:var(--muted);animation:bubbleIn 0.3s ease,blink2 1s infinite;}
+  @keyframes blink2{0%,100%{opacity:1}50%{opacity:0.4}}
+  .voice-input-bar{margin:0 20px 10px;display:flex;gap:8px;}
+  .voice-text-input{flex:1;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:24px;color:var(--text);font-size:0.84rem;font-family:inherit;}
+  .voice-text-input:focus{outline:none;border-color:var(--accent2);}
+  .voice-send-btn{width:42px;height:42px;border-radius:50%;background:var(--accent2);border:none;color:#fff;font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .voice-mic-btn{width:42px;height:42px;border-radius:50%;background:rgba(56,189,248,0.15);border:1px solid var(--accent);color:var(--accent);font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .voice-mic-btn.on{background:var(--accent);color:#000;animation:orbPulse 0.8s infinite;}
+  .quick-asks{margin:0 20px 10px;display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;}
+  .qa-chip{padding:5px 12px;border-radius:20px;border:1px solid rgba(129,140,248,0.3);background:rgba(129,140,248,0.08);color:var(--accent2);font-size:0.72rem;white-space:nowrap;cursor:pointer;font-family:inherit;transition:all 0.2s;}
+  .qa-chip:hover{background:rgba(129,140,248,0.2);}
+
+</style>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAj3PSk-LUo9ySxDIgRpZ4VAu_v1O9hpyg&libraries=places&language=ja"></script>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo">てのひら <span>生活支援アシスタント</span></div>
+    <div class="header-right">
+      <span class="mock-badge">MOCK 20260506-STB</span>
+      <div class="status-dot" id="dot"></div>
+    </div>
+  </header>
+
+  <!-- ホーム -->
+  <div class="tab-view active" id="tab-home">
+    <div class="card">
+      <div class="label">📍 現在地（モック）</div>
+      <div class="location-text" id="locationText">📡 GPS取得中...</div>
+      <div class="location-coords" id="locationCoords"></div>
+      <div class="row">
+        <button class="btn-sm" onclick="mockGetLocation()">🔄 更新</button>
+        <button class="btn-sm" onclick="mockShare()">📤 共有</button>
+        <button class="btn-sm danger" onclick="mockEmergency()">🆘 緊急</button>
+      </div>
+    </div>
+
+    <div class="voice-section">
+      <button class="vbtn" id="vbtn" onclick="toggleVoice()">🎤</button>
+      <div class="vs" id="vs">マイクをタップして音声入力</div>
+      <div class="vt" id="vt">認識したコマンドがここに表示されます</div>
+    </div>
+
+    <div class="card" style="padding-top:12px">
+      <div class="label" style="margin-bottom:8px">💬 音声コマンド例（タップでも動作）</div>
+      <div class="cmd-grid">
+        <button class="cmd-chip" onclick="runCmd('周囲を確認して')">👁️ 周囲を確認して</button>
+        <button class="cmd-chip" onclick="runCmd('現在地を教えて')">📍 現在地を教えて</button>
+        <button class="cmd-chip" onclick="runCmd('近くのトイレを探して')">🚻 トイレを探して</button>
+        <button class="cmd-chip" onclick="runCmd('近くの病院を探して')">🏥 病院を探して</button>
+        <button class="cmd-chip" onclick="runCmd('近くのコンビニを探して')">🏪 コンビニを探して</button>
+        <button class="cmd-chip" onclick="runCmd('助けを呼んで')">🆘 助けを呼んで</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- カメラ -->
+  <div class="tab-view" id="tab-camera">
+    <div class="cam-wrap" id="camWrap">
+      <video id="camVideo" autoplay playsinline></video>
+      <div class="cam-ph" id="camPh"><div style="font-size:2.8rem">📷</div><div>タップしてカメラを起動</div></div>
+      <div class="sf" id="sf"><div class="sl" id="sl"></div></div>
+    </div>
+    <canvas id="canvas"></canvas>
+    <div class="cam-btns">
+      <button class="btn-sm" style="flex:2" onclick="analyzeCamera()">🔍 AI解析（モック）</button>
+      <button class="btn-sm" onclick="stopCam()">⏹ 停止</button>
+    </div>
+    <div class="card">
+      <div class="label">🤖 AI解析結果</div>
+      <div class="at" id="at" style="color:var(--muted)">カメラを起動すると周囲を解析します（モック動作）</div>
+    </div>
+  </div>
+
+  <!-- マップ -->
+  <div class="tab-view" id="tab-map">
+    <!-- モックマップ -->
+    <div class="map-wrap">
+      <div class="mock-map" id="mockMap">
+        <svg viewBox="0 0 480 240" xmlns="http://www.w3.org/2000/svg">
+          <!-- 背景 -->
+          <rect width="480" height="240" fill="#1a2540"/>
+          <!-- 道路（縦） -->
+          <rect x="100" y="0" width="22" height="240" fill="#253653"/>
+          <rect x="111" y="0" width="2" height="240" fill="#2d4a6b" stroke-dasharray="12,8"/>
+          <rect x="220" y="0" width="30" height="240" fill="#253653"/>
+          <rect x="235" y="0" width="2" height="240" fill="#2d4a6b"/>
+          <rect x="360" y="0" width="20" height="240" fill="#253653"/>
+          <!-- 道路（横） -->
+          <rect x="0" y="90" width="480" height="24" fill="#253653"/>
+          <rect x="0" y="101" width="480" height="2" fill="#2d4a6b"/>
+          <rect x="0" y="180" width="480" height="18" fill="#253653"/>
+          <!-- 建物群 -->
+          <rect x="130" y="10" width="80" height="72" rx="3" fill="#283d6a" stroke="#334d80" stroke-width="1"/>
+          <rect x="135" y="15" width="30" height="20" rx="2" fill="#2d4a6b"/>
+          <rect x="170" y="15" width="35" height="35" rx="2" fill="#2d4a6b"/>
+          <rect x="250" y="10" width="100" height="72" rx="3" fill="#283d6a" stroke="#334d80" stroke-width="1"/>
+          <rect x="255" y="20" width="40" height="55" rx="2" fill="#253060"/>
+          <rect x="300" y="20" width="45" height="35" rx="2" fill="#253060"/>
+          <rect x="130" y="122" width="80" height="50" rx="3" fill="#283d6a" stroke="#334d80" stroke-width="1"/>
+          <rect x="250" y="122" width="100" height="50" rx="3" fill="#283d6a" stroke="#334d80" stroke-width="1"/>
+          <rect x="10" y="10" width="82" height="72" rx="3" fill="#283d6a" stroke="#334d80" stroke-width="1"/>
+          <rect x="10" y="122" width="82" height="50" rx="3" fill="#283d6a" stroke="#334d80" stroke-width="1"/>
+          <rect x="390" y="10" width="82" height="72" rx="3" fill="#283d6a" stroke="#334d80" stroke-width="1"/>
+          <rect x="390" y="122" width="82" height="50" rx="3" fill="#283d6a" stroke="#334d80" stroke-width="1"/>
+          <!-- ルート線（アニメ） -->
+          <polyline id="routeLine" points="" stroke="#38bdf8" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="8,4" opacity="0">
+            <animate attributeName="stroke-dashoffset" from="0" to="-24" dur="0.8s" repeatCount="indefinite"/>
+          </polyline>
+          <!-- 施設マーカー -->
+          <g id="markers"></g>
+          <!-- 現在地 -->
+          <circle cx="240" cy="114" r="8" fill="#38bdf8" stroke="#fff" stroke-width="2"/>
+          <circle cx="240" cy="114" r="15" fill="#38bdf8" fill-opacity="0.2">
+            <animate attributeName="r" values="10;20;10" dur="2s" repeatCount="indefinite"/>
+            <animate attributeName="fill-opacity" values="0.3;0;0.3" dur="2s" repeatCount="indefinite"/>
+          </circle>
+          <!-- 凡例 -->
+          <rect x="6" y="200" width="120" height="34" rx="4" fill="rgba(10,15,30,0.8)"/>
+          <circle cx="18" cy="210" r="5" fill="#38bdf8" stroke="#fff" stroke-width="1.5"/>
+          <text x="27" y="214" fill="#e2e8f0" font-size="8">現在地</text>
+          <circle cx="18" cy="226" r="5" fill="#34d399" stroke="#fff" stroke-width="1.5"/>
+          <text x="27" y="230" fill="#e2e8f0" font-size="8">周辺施設</text>
+        </svg>
+        <div class="my-pos"><div class="pos-dot"></div></div>
+        <div class="map-controls">
+          <button class="map-ctrl-btn" onclick="mockZoom(1)">＋</button>
+          <div class="map-zoom" id="zoomLevel">16</div>
+          <button class="map-ctrl-btn" onclick="mockZoom(-1)">－</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card route-panel" id="routePanel">
+      <div class="label">🚶 ルート案内（モック）</div>
+      <div id="routeSteps"></div>
+    </div>
+
+    <div class="search-bar">
+      <input class="search-input" id="searchInput" placeholder="施設名・場所を検索..." />
+      <button class="search-btn" onclick="mockSearch()">検索</button>
+    </div>
+    <div class="cat-chips">
+      <button class="cat-chip active" onclick="setCat(this,'hospital')">🏥 病院</button>
+      <button class="cat-chip" onclick="setCat(this,'toilet')">🚻 トイレ</button>
+      <button class="cat-chip" onclick="setCat(this,'pharmacy')">💊 薬局</button>
+      <button class="cat-chip" onclick="setCat(this,'convenience')">🏪 コンビニ</button>
+      <button class="cat-chip" onclick="setCat(this,'parking')">🅿️ 駐車場</button>
+      <button class="cat-chip" onclick="setCat(this,'station')">🚇 駅</button>
+    </div>
+    <div class="places-list" id="placesList"></div>
+  </div>
+</div>
+
+
+  <!-- AIアシスタントタブ -->
+  <div class="tab-view" id="tab-ai">
+    <div class="ai-hero">
+      <div class="ai-orb" id="aiOrb" onclick="toggleAiVoice()">🤖</div>
+      <div class="ai-status" id="aiStatus">オーブをタップして話しかける</div>
+      <div class="ai-hint">話しかけるだけで操作できます</div>
+    </div>
+
+    <div class="quick-asks">
+      <button class="qa-chip" onclick="aiAsk('今日の体調管理で気をつけることは？')">体調管理</button>
+      <button class="qa-chip" onclick="aiAsk('車椅子で新宿駅を利用するコツを教えて')">車椅子移動</button>
+      <button class="qa-chip" onclick="aiAsk('介護保険サービスについて教えて')">介護保険</button>
+      <button class="qa-chip" onclick="aiAsk('緊急時の連絡方法は？')">緊急時対応</button>
+      <button class="qa-chip" onclick="aiAsk('今日の天気に合わせた外出アドバイスは？')">外出アドバイス</button>
+    </div>
+
+    <div class="chat-log" id="chatLog"></div>
+
+    <div class="voice-input-bar">
+      <button class="voice-mic-btn" id="aiMicBtn" onclick="toggleAiVoice()">🎤</button>
+      <input class="voice-text-input" id="aiTextInput" placeholder="メッセージを入力..." />
+      <button class="voice-send-btn" onclick="aiSendText()">➤</button>
+    </div>
+  </div>
+
+
+  <!-- 設定タブ -->
+  <div class="tab-view" id="tab-setting">
+    <div class="setting-section">
+      <div class="setting-title">🔊 音声アシスタント設定</div>
+
+      <!-- 性別 -->
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">声の性別</div>
+          <div class="setting-sub">利用可能な音声から選択</div>
+        </div>
+        <div class="setting-control">
+          <button class="seg-btn" id="btnMale" onclick="setVoiceGender('male')">男性</button>
+          <button class="seg-btn active" id="btnFemale" onclick="setVoiceGender('female')">女性</button>
+        </div>
+      </div>
+
+      <!-- 速度 -->
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">話す速度</div>
+          <div class="setting-sub" id="rateLabel">0.9（標準）</div>
+        </div>
+        <div class="slider-wrap">
+          <input type="range" id="rateSlider" min="0.5" max="2.0" step="0.1" value="0.9"
+            oninput="updateRate(this.value)">
+          <span class="slider-val" id="rateVal">0.9</span>
+        </div>
+      </div>
+
+      <!-- 音程 -->
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">声の高さ</div>
+          <div class="setting-sub" id="pitchLabel">1.4（女性）</div>
+        </div>
+        <div class="slider-wrap">
+          <input type="range" id="pitchSlider" min="0.5" max="2.0" step="0.1" value="1.4"
+            oninput="updatePitch(this.value)">
+          <span class="slider-val" id="pitchVal">1.4</span>
+        </div>
+      </div>
+
+      <!-- 音声選択 -->
+      <div class="setting-row" style="flex-direction:column;align-items:flex-start;">
+        <div class="setting-label">音声エンジン</div>
+        <div class="setting-sub">端末で利用可能な日本語音声</div>
+        <select class="voice-select" id="voiceSelect" onchange="setVoiceByName(this.value)">
+          <option value="">自動選択</option>
+        </select>
+      </div>
+
+      <!-- プレビュー -->
+      <button class="voice-preview-btn" onclick="previewVoice()">🔊 この設定で試し聴き</button>
+    </div>
+
+    <div class="setting-section">
+      <div class="setting-title">🤖 AIモデル設定</div>
+
+      <!-- AIモード選択 -->
+      <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:10px;">
+        <div>
+          <div class="setting-label">動作モード</div>
+          <div class="setting-sub">どのAIを使って回答するか</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="seg-btn active" id="modeHybrid" onclick="setAiMode('hybrid')">🔀 ハイブリッド</button>
+          <button class="seg-btn" id="modeGpt" onclick="setAiMode('gpt')">🟢 ChatGPT</button>
+          <button class="seg-btn" id="modeClaude" onclick="setAiMode('claude')">🟣 Claude</button>
+        </div>
+      </div>
+
+      <!-- ChatGPTモデル選択 -->
+      <div class="setting-row" style="flex-direction:column;align-items:flex-start;" id="gptModelRow">
+        <div class="setting-label">ChatGPTモデル</div>
+        <select class="voice-select" id="gptModelSelect" onchange="setGptModel(this.value)">
+          <option value="gpt-4o-mini" selected>gpt-4o-mini（軽量・高速）</option>
+          <option value="gpt-4o">gpt-4o（高精度）</option>
+          <option value="gpt-4-turbo">gpt-4-turbo</option>
+          <option value="gpt-3.5-turbo">gpt-3.5-turbo（低コスト）</option>
+        </select>
+      </div>
+
+      <!-- Claudeモデル選択 -->
+      <div class="setting-row" style="flex-direction:column;align-items:flex-start;" id="claudeModelRow">
+        <div class="setting-label">Claudeモデル</div>
+        <select class="voice-select" id="claudeModelSelect" onchange="setClaudeModel(this.value)">
+          <option value="claude-sonnet-4-20250514" selected>claude-sonnet-4（バランス）</option>
+          <option value="claude-opus-4-5">claude-opus-4（最高精度）</option>
+          <option value="claude-haiku-4-5-20251001">claude-haiku-4（高速）</option>
+        </select>
+      </div>
+
+      <!-- 現在の設定表示 -->
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">現在の設定</div>
+          <div class="setting-sub" id="currentModelLabel">🔀 ハイブリッド｜GPT: gpt-4o-mini｜Claude: claude-sonnet-4</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="setting-section">
+      <div class="setting-title">📡 デバイス状態</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">状態通知間隔</div>
+          <div class="setting-sub">カメラ・マイクの状態を音声で通知</div>
+        </div>
+        <div class="setting-control">
+          <button class="seg-btn active" id="btn5s" onclick="setMonitorInterval(5000,this)">5秒</button>
+          <button class="seg-btn" id="btn10s" onclick="setMonitorInterval(10000,this)">10秒</button>
+          <button class="seg-btn" id="btnOff" onclick="setMonitorInterval(0,this)">オフ</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<nav class="nav">
+  <button class="nb active" onclick="setTab(this,'home')"><span class="ni">🏠</span>ホーム</button>
+  <button class="nb" onclick="setTab(this,'camera')"><span class="ni">📷</span>カメラ</button>
+  <button class="nb" onclick="setTab(this,'map')"><span class="ni">🗺️</span>マップ</button>
+  <button class="nb" onclick="setTab(this,'ai')"><span class="ni">🤖</span>AI</button>
+  <button class="nb" onclick="setTab(this,'setting')"><span class="ni">⚙️</span>設定</button>
+</nav>
+<div class="toast" id="toast"></div>
+
+<script>
+
+// ===== Google Maps Places API リアル施設検索 =====
+const MAPS_KEY = "AIzaSyAj3PSk-LUo9ySxDIgRpZ4VAu_v1O9hpyg";
+let placesService = null;
+
+function initPlacesService() {
+  if (!window.google || !window.google.maps) return;
+  const dummy = document.createElement('div');
+  placesService = new google.maps.places.PlacesService(dummy);
+}
+
+// 音声コマンドから施設タイプを判定
+function detectPlaceType(text) {
+  if (/トイレ|便所|化粧室/.test(text)) return { type: 'point_of_interest', keyword: 'トイレ 公衆', icon: '🚻', label: 'トイレ' };
+  if (/病院|救急|クリニック|医院/.test(text)) return { type: 'hospital', keyword: '病院', icon: '🏥', label: '病院' };
+  if (/薬局|ドラッグ|薬/.test(text)) return { type: 'pharmacy', keyword: '薬局', icon: '💊', label: '薬局' };
+  if (/コンビニ|セブン|ローソン|ファミマ/.test(text)) return { type: 'convenience_store', keyword: 'コンビニ', icon: '🏪', label: 'コンビニ' };
+  if (/駐車場|パーキング/.test(text)) return { type: 'parking', keyword: '駐車場', icon: '🅿️', label: '駐車場' };
+  if (/駅|電車|地下鉄/.test(text)) return { type: 'subway_station', keyword: '駅', icon: '🚇', label: '駅' };
+  if (/スーパー|食料/.test(text)) return { type: 'supermarket', keyword: 'スーパー', icon: '🛒', label: 'スーパー' };
+  return null;
+}
+
+async function searchNearbyPlaces(text) {
+  const placeType = detectPlaceType(text);
+  if (!placeType) return null;
+  if (!CURRENT_LOCATION.lat) return null;  // latがあれば検索実行
+
+  return new Promise((resolve) => {
+    if (!placesService) initPlacesService();
+    if (!placesService) { resolve(null); return; }
+
+    const location = new google.maps.LatLng(
+      CURRENT_LOCATION.lat || MOCK_LOCATION.lat,
+      CURRENT_LOCATION.lon || MOCK_LOCATION.lon
+    );
+
+    placesService.nearbySearch({
+      location,
+      radius: 2000,
+      type: placeType.type,
+      keyword: placeType.keyword,
+      language: 'ja',
+    }, (results, status) => {
+      if (status === google.maps.places.PlacesServiceStatus.OK && results.length > 0) {
+        const top3 = results.slice(0, 5).map(p => {
+          const lat2 = p.geometry.location.lat();
+          const lon2 = p.geometry.location.lng();
+          const dist = calcDist(
+            CURRENT_LOCATION.lat || MOCK_LOCATION.lat,
+            CURRENT_LOCATION.lon || MOCK_LOCATION.lon,
+            lat2, lon2
+          );
+          return {
+            name: p.name,
+            address: p.vicinity || '',
+            dist,
+            open: p.opening_hours?.isOpen?.(),
+            rating: p.rating,
+            icon: placeType.icon,
+            lat: lat2, lon: lon2,
+          };
+        });
+        resolve({ label: placeType.label, places: top3 });
+      } else {
+        resolve(null);
+      }
+    });
+  });
+}
+
+function calcDist(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dL = (lat2-lat1)*Math.PI/180;
+  const dO = (lon2-lon1)*Math.PI/180;
+  const a = Math.sin(dL/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dO/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+function formatPlacesResult(result) {
+  const lines = result.places.map((p, i) => {
+    const dist = p.dist < 1 ? Math.round(p.dist*1000)+'m' : p.dist.toFixed(1)+'km';
+    const open = p.open === true ? '営業中' : p.open === false ? '休業中' : '';
+    const rating = p.rating ? `⭐${p.rating}` : '';
+    return `${i+1}. ${p.icon}${p.name}（${dist}${open?' '+open:''}${rating?' '+rating:''}）`;
+  }).join('\n');
+  return `近くの${result.label}を${result.places.length}件見つけました。\n${lines}`;
+}
+
+// ===== モックデータ =====
+// 起動時はモック値、GPS取得後に実値で上書き
+const MOCK_LOCATION = { lat: 35.6895, lon: 139.6917, address: '東京都新宿区西新宿2丁目 新宿駅西口付近' };
+let CURRENT_LOCATION = { ...MOCK_LOCATION, isReal: false };
+
+const MOCK_PLACES = {
+  hospital: [
+    { name: '新宿東口病院', address: '新宿区歌舞伎町1-2-3', dist: 0.3, rating: 4.1, open: true, icon: '🏥', mapX: 310, mapY: 60 },
+    { name: '都立新宿医療センター', address: '新宿区西新宿8-1-1', dist: 0.7, rating: 4.3, open: true, icon: '🏥', mapX: 150, mapY: 40 },
+    { name: '慶應義塾大学病院', address: '新宿区信濃町35', dist: 1.2, rating: 4.5, open: true, icon: '🏥', mapX: 380, mapY: 130 },
+    { name: '新宿クリニック', address: '新宿区新宿3-5-6', dist: 0.5, rating: 3.9, open: false, icon: '🏥', mapX: 160, mapY: 140 },
+  ],
+  toilet: [
+    { name: '新宿駅西口 多目的トイレ', address: '新宿駅西口コンコース内', dist: 0.1, rating: 3.8, open: true, icon: '🚻', mapX: 250, mapY: 90 },
+    { name: 'ルミネ1 バリアフリートイレ', address: '新宿区西新宿1-1-5', dist: 0.2, rating: 4.0, open: true, icon: '🚻', mapX: 290, mapY: 50 },
+    { name: '新宿中央公園 多目的トイレ', address: '新宿区西新宿2-11', dist: 0.5, rating: 3.6, open: true, icon: '🚻', mapX: 130, mapY: 50 },
+    { name: 'ヨドバシカメラ 多目的トイレ', address: '新宿区西新宿1-11-1', dist: 0.3, rating: 4.2, open: true, icon: '🚻', mapX: 340, mapY: 140 },
+  ],
+  pharmacy: [
+    { name: 'マツモトキヨシ 新宿西口店', address: '新宿区西新宿1-1-3', dist: 0.2, rating: 3.9, open: true, icon: '💊', mapX: 270, mapY: 55 },
+    { name: 'ウエルシア薬局 新宿店', address: '新宿区新宿3-14-1', dist: 0.6, rating: 4.0, open: true, icon: '💊', mapX: 350, mapY: 60 },
+    { name: 'ドラッグストアコスモス', address: '新宿区西新宿2-6-1', dist: 0.4, rating: 3.7, open: false, icon: '💊', mapX: 170, mapY: 130 },
+  ],
+  convenience: [
+    { name: 'セブンイレブン 新宿西口店', address: '新宿区西新宿1-1-1', dist: 0.1, rating: 4.1, open: true, icon: '🏪', mapX: 255, mapY: 70 },
+    { name: 'ローソン 新宿西新宿店', address: '新宿区西新宿2-4-1', dist: 0.3, rating: 3.8, open: true, icon: '🏪', mapX: 140, mapY: 80 },
+    { name: 'ファミリーマート 新宿3丁目', address: '新宿区新宿3-1-1', dist: 0.5, rating: 3.9, open: true, icon: '🏪', mapX: 360, mapY: 55 },
+    { name: 'ミニストップ 新宿南店', address: '新宿区新宿4-1-7', dist: 0.8, rating: 3.6, open: true, icon: '🏪', mapX: 390, mapY: 145 },
+  ],
+  parking: [
+    { name: '新宿西口地下駐車場', address: '新宿区西新宿1丁目', dist: 0.2, rating: 3.7, open: true, icon: '🅿️', mapX: 220, mapY: 60 },
+    { name: 'タイムズ新宿第3', address: '新宿区西新宿3-7-1', dist: 0.4, rating: 4.0, open: true, icon: '🅿️', mapX: 130, mapY: 145 },
+    { name: '新宿パークタワー駐車場', address: '新宿区西新宿3-7-1', dist: 0.7, rating: 4.1, open: true, icon: '🅿️', mapX: 80, mapY: 40 },
+  ],
+  station: [
+    { name: '新宿駅（JR・小田急・京王）', address: '新宿区新宿3-38-1', dist: 0.1, rating: 3.5, open: true, icon: '🚇', mapX: 240, mapY: 100 },
+    { name: '西新宿駅（丸ノ内線）', address: '新宿区西新宿1丁目', dist: 0.3, rating: 3.8, open: true, icon: '🚇', mapX: 280, mapY: 80 },
+    { name: '新宿西口駅（大江戸線）', address: '新宿区西新宿1丁目', dist: 0.2, rating: 3.9, open: true, icon: '🚇', mapX: 200, mapY: 105 },
+  ],
+};
+
+const MOCK_ANALYSIS = [
+  '屋外の歩道です。正面に横断歩道があります。段差は見当たりません。歩行者が多い時間帯です。安全に進めます。',
+  '屋内（駅コンコース）です。スムーズな床面で段差なし。左手に多目的トイレがあります。エレベーターは右奥です。',
+  '歩道を歩いています。前方10メートルに電柱があります。右に迂回することをお勧めします。',
+  '商業施設入口付近です。自動ドアがあります。段差（約2センチ）に注意してください。スロープは右側にあります。',
+  '公園内の舗装路です。広くて平坦です。ベンチが両側にあります。快適に移動できます。',
+];
+
+const MOCK_ROUTES = {
+  hospital: [
+    { icon:'🚶', text:'現在地 → 北に50m直進', dist:'50m' },
+    { icon:'↗️', text:'右折して大通りへ', dist:'30m' },
+    { icon:'🏥', text:'新宿東口病院に到着', dist:'目的地' },
+  ],
+  toilet: [
+    { icon:'🚶', text:'現在地から西口改札方向へ', dist:'30m' },
+    { icon:'🚻', text:'コンコース内 多目的トイレに到着', dist:'目的地' },
+  ],
+  default: [
+    { icon:'🚶', text:'現在地から北に進む', dist:'100m' },
+    { icon:'↙️', text:'左折して目的地方向へ', dist:'80m' },
+    { icon:'📍', text:'目的地に到着', dist:'目的地' },
+  ],
+};
+
+// ===== 状態 =====
+let isListening = false, recognition = null, camStream = null, curCat = 'hospital';
+let zoomLevel = 16;
+
+// ===== 起動 =====
+window.addEventListener('load', () => {
+  setTimeout(initPlacesService, 1000);
+  setTimeout(startDeviceMonitor, 3000); // 起動3秒後に監視開始
+  setTimeout(loadVoiceList, 1500);
+  setDot('active');
+  renderPlaces('hospital');
+  setupCam();
+  setupSR();
+  setupAiVoice();
+  // 起動時はAIアシスタントタブを表示してオンボーディング開始
+  setTimeout(startOnboarding, 800);
+});
+
+// ===== オンボーディング（完全音声駆動） =====
+let onboardDone = false;
+
+async function startOnboarding() {
+  // AIタブを自動で開く
+  const aiTab = document.querySelectorAll('.nb')[3];
+  if (aiTab) setTab(aiTab, 'ai');
+
+  // Step1: 挨拶 → 自動でGPS・マイク・カメラを順次取得
+  await speakAndWait('てのひらへようこそ。生活支援AIアシスタントです。位置情報、マイク、カメラの準備を自動で行います。', 4000);
+  await doRequestGPS();
+}
+
+async function doRequestGPS() {
+  addBubble('ai', '📍 現在地を取得しています...');
+  document.getElementById('aiStatus').textContent = 'GPS取得中...';
+
+  await mockGetLocation();
+
+  const addr = CURRENT_LOCATION.address || MOCK_LOCATION.address;
+  await speakAndWait(`現在地を確認しました。${addr}付近です。`, 3000);
+  await doRequestMic();
+}
+
+async function doRequestMic() {
+  await speakAndWait('続いてマイクを準備します。音声でアプリを操作できるようになります。', 3000);
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach(t => t.stop());
+    addBubble('ai', '🎤 マイクの準備ができました');
+    await speakAndWait('マイクの準備ができました。', 2000);
+  } catch {
+    addBubble('ai', '🎤 マイクは利用できません。音声入力以外の方法で操作できます。');
+    await speakAndWait('マイクは利用できませんが、テキスト入力で操作できます。', 3000);
+  }
+  await doRequestCamera();
+}
+
+async function doRequestCamera() {
+  await speakAndWait('カメラを準備します。周囲の障害物や段差をAIが解析します。', 3000);
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    stream.getTracks().forEach(t => t.stop());
+    addBubble('ai', '📷 カメラの準備ができました');
+    await speakAndWait('カメラの準備ができました。', 2000);
+  } catch {
+    addBubble('ai', '📷 カメラは利用できません。後から設定できます。');
+    await speakAndWait('カメラは現在利用できません。', 2000);
+  }
+  await onboardingComplete();
+}
+
+async function onboardingComplete() {
+  onboardDone = true;
+  const addr = CURRENT_LOCATION.address || MOCK_LOCATION.address;
+  const msg = `準備が整いました。現在地は${addr}です。声でご指示ください。たとえば「病院を探して」「周囲を確認して」などと話しかけてください。`;
+  addBubble('ai', msg);
+  speak(msg);
+  document.getElementById('aiStatus').textContent = '話しかけてください 🎤';
+  setDot('active');
+  showToast('✅ 準備完了 — 話しかけてください');
+
+  // 準備完了後に音声認識を自動スタート
+  setTimeout(() => {
+    if (aiRecognition && !aiListening) toggleAiVoice();
+  }, 5000);
+}
+
+// 音声読み上げ＋指定ms待機
+function speakAndWait(text, ms) {
+  return new Promise(resolve => {
+    addBubble('ai', text);
+    speak(text);
+    setTimeout(resolve, ms);
+  });
+}
+
+// ===== 位置情報（モック） =====
+
+// 住所変換フォールバック（Nominatim）
+async function reverseGeocodeNominatim(lat, lon) {
+  try {
+    const r = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=ja`,
+      { headers: { 'User-Agent': 'tenohira-app/1.0' } }
+    );
+    const d = await r.json();
+    const a = d.address;
+    // 日本の住所形式で組み立て
+    const parts = [
+      a.prefecture || a.state,
+      a.city || a.town || a.village || a.county,
+      a.suburb || a.neighbourhood || a.quarter,
+      a.road || a.pedestrian
+    ].filter(Boolean);
+    return parts.length > 0 ? parts.join('') : (d.display_name?.split(',')[0] || '住所不明');
+  } catch {
+    return '住所を取得できませんでした';
+  }
+}
+
+async function mockGetLocation() {
+  setDot('listen');
+  document.getElementById('locationText').textContent = '📡 GPS取得中...';
+  document.getElementById('locationCoords').textContent = '';
+
+  if (!navigator.geolocation) {
+    useMockLocation();
+    showToast('⚠ GPS非対応 — モック位置を使用');
+    return;
+  }
+
+  // Promiseで包んで完了を待てるようにする
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        const acc = Math.round(pos.coords.accuracy);
+
+        CURRENT_LOCATION = { lat, lon, isReal: true, address: '' };
+        document.getElementById('locationCoords').textContent =
+          `${lat.toFixed(5)}, ${lon.toFixed(5)} (精度 ±${acc}m)`;
+        setDot('active');
+
+        // Google Geocoding APIで住所取得
+        try {
+          await new Promise((res2) => {
+            const geocoder = new google.maps.Geocoder();
+            geocoder.geocode(
+              { location: { lat, lng: lon }, language: 'ja' },
+              (results, status) => {
+                let addr;
+                if (status === 'OK' && results[0]) {
+                  addr = results[0].formatted_address
+                    .replace('日本、', '')
+                    .replace(/〒[0-9-]+ /, '');
+                } else {
+                  // Geocoding失敗時はNominatimで再試行
+                  addr = await reverseGeocodeNominatim(lat, lon);
+                }
+                CURRENT_LOCATION.address = addr;
+                CURRENT_LOCATION.lat = lat;
+                CURRENT_LOCATION.lon = lon;
+                CURRENT_LOCATION.isReal = true;
+                document.getElementById('locationText').textContent = addr;
+                document.getElementById('locationCoords').textContent =
+                  `${lat.toFixed(5)}, ${lon.toFixed(5)} (精度 ±${acc}m)`;
+                showToast('✅ GPS取得完了');
+                initPlacesService();
+                // GPS確定後に現在地を音声で案内
+                speak('現在地は' + addr + 'です');
+                res2();
+              }
+            );
+          });
+        } catch(e) {
+          const addr = await reverseGeocodeNominatim(lat, lon);
+          CURRENT_LOCATION.address = addr;
+          CURRENT_LOCATION.lat = lat;
+          CURRENT_LOCATION.lon = lon;
+          CURRENT_LOCATION.isReal = true;
+          document.getElementById('locationText').textContent = addr;
+          showToast('✅ GPS取得完了');
+          speak('現在地は' + addr + 'です');
+        }
+        resolve();
+      },
+      (err) => {
+        const msgs = { 1:'位置情報の許可が必要です', 2:'GPS取得できません', 3:'タイムアウト' };
+        showToast('⚠ ' + (msgs[err.code]||'GPSエラー') + ' — モック位置を使用');
+        useMockLocation();
+        resolve();
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  });
+}
+
+function useMockLocation() {
+  CURRENT_LOCATION = { ...MOCK_LOCATION, isReal: false };
+  document.getElementById('locationText').textContent = '📍 ' + MOCK_LOCATION.address + '（モック）';
+  document.getElementById('locationCoords').textContent =
+    `${MOCK_LOCATION.lat}, ${MOCK_LOCATION.lon} (モック値)`;
+  setDot('active');
+}
+function mockShare() {
+  const url = `https://maps.google.com/?q=${CURRENT_LOCATION.lat},${CURRENT_LOCATION.lon}`;
+  navigator.clipboard?.writeText(url).then(() => showToast('📋 位置URLをコピーしました'))
+    .catch(() => showToast('📤 ' + url));
+}
+function mockEmergency() {
+  if (confirm('緊急通報しますか？\n現在地: ' + MOCK_LOCATION.address + '\n\n※ モックモードのため実際には発信しません')) {
+    speak('緊急通報します。現在地は' + MOCK_LOCATION.address + 'です');
+    showToast('🆘 緊急通報（モック）');
+  }
+}
+
+// ===== 施設検索（モック） =====
+function setCat(btn, cat) {
+  document.querySelectorAll('.cat-chip').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  curCat = cat;
+  renderPlaces(cat);
+  updateMapMarkers(cat);
+}
+function mockSearch() {
+  const q = document.getElementById('searchInput').value.trim();
+  if (!q) return;
+  showToast('🔍 「' + q + '」で検索中...(モック)');
+  setTimeout(() => { renderPlaces(curCat); showToast('✅ ' + (MOCK_PLACES[curCat]?.length||0) + '件見つかりました'); }, 800);
+}
+function renderPlaces(cat) {
+  const list = document.getElementById('placesList');
+  const places = MOCK_PLACES[cat] || [];
+  if (!places.length) { list.innerHTML = '<div class="empty">施設が見つかりません</div>'; return; }
+  list.innerHTML = '';
+  places.forEach((p, i) => {
+    const el = document.createElement('div');
+    el.className = 'place-item';
+    el.innerHTML = `
+      <div class="pi">${p.icon}</div>
+      <div class="pc">
+        <div class="pn">${p.name}</div>
+        <div class="pa">${p.address}</div>
+        <div class="pm">
+          <span class="pd">📍 ${p.dist < 1 ? Math.round(p.dist*1000)+'m' : p.dist.toFixed(1)+'km'}</span>
+          <span class="pr">⭐ ${p.rating}</span>
+          <span class="po ${p.open?'op':'cl'}">${p.open?'営業中':'休業中'}</span>
+        </div>
+      </div>
+      <div class="pact">
+        <button class="nav-btn2" onclick="showRoute('${cat}','${p.name}',${i},event)">🚶 案内</button>
+        <button class="nav-btn2" onclick="spkPlace('${p.name}',${p.dist})">🔊</button>
+      </div>`;
+    list.appendChild(el);
+  });
+}
+function spkPlace(name, dist) {
+  const d = dist < 1 ? Math.round(dist*1000)+'メートル' : dist.toFixed(1)+'キロメートル';
+  speak(`${name}まで約${d}です`);
+}
+
+// ===== モックルート案内 =====
+function showRoute(cat, name, idx, e) {
+  e.stopPropagation();
+  const steps = MOCK_ROUTES[cat] || MOCK_ROUTES.default;
+  const p = MOCK_PLACES[cat]?.[idx];
+  const dist = p ? (p.dist < 1 ? Math.round(p.dist*1000)+'m' : p.dist.toFixed(1)+'km') : '不明';
+  const time = p ? Math.round(p.dist * 15) + '分' : '不明';
+
+  const panel = document.getElementById('routePanel');
+  document.getElementById('routeSteps').innerHTML = `
+    <div class="route-step"><div>🏁</div><div><strong>${dist}</strong> 徒歩 <strong>${time}</strong></div></div>
+    ${steps.map(s=>`
+    <div class="route-step">
+      <div>${s.icon}</div>
+      <div><div>${s.text}</div><div class="route-step-dist">${s.dist}</div></div>
+    </div>`).join('')}`;
+  panel.classList.add('active');
+
+  // マップにルート線表示
+  const routeLine = document.getElementById('routeLine');
+  if (p) {
+    routeLine.setAttribute('points', `240,114 ${p.mapX},${p.mapY}`);
+    routeLine.setAttribute('opacity', '1');
+  }
+  setTab(document.querySelectorAll('.nb')[2], 'map');
+  speak(`${name}まで徒歩約${time}です。ルート案内を開始します。`);
+  showToast('🚶 ルート案内開始');
+}
+
+// ===== モックマップマーカー =====
+function updateMapMarkers(cat) {
+  const markers = document.getElementById('markers');
+  markers.innerHTML = '';
+  const places = MOCK_PLACES[cat] || [];
+  places.slice(0, 4).forEach(p => {
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.innerHTML = `
+      <circle cx="${p.mapX}" cy="${p.mapY}" r="6" fill="#34d399" stroke="#fff" stroke-width="1.5"/>
+      <text x="${p.mapX+8}" y="${p.mapY+4}" fill="#e2e8f0" font-size="7">${p.name.slice(0,6)}</text>`;
+    markers.appendChild(g);
+  });
+}
+
+function mockZoom(d) {
+  zoomLevel = Math.max(10, Math.min(20, zoomLevel + d));
+  document.getElementById('zoomLevel').textContent = zoomLevel;
+  showToast('ズームレベル: ' + zoomLevel);
+}
+
+// ===== カメラ =====
+function setupCam() { document.getElementById('camWrap').addEventListener('click', toggleCam); }
+async function toggleCam() {
+  if (camStream) return;
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({ video:{facingMode:'environment'} });
+    const v = document.getElementById('camVideo');
+    v.srcObject = camStream; v.style.display = 'block';
+    document.getElementById('camPh').style.display = 'none';
+    document.getElementById('sf').classList.add('on');
+    document.getElementById('sl').classList.add('on');
+    showToast('カメラ起動');
+    setTimeout(analyzeCamera, 2000);
+  } catch {
+    showToast('カメラ未対応 → モック解析を表示');
+    mockAnalyze();
+  }
+}
+function stopCam() {
+  if (camStream) { camStream.getTracks().forEach(t=>t.stop()); camStream=null; }
+  document.getElementById('camVideo').style.display = 'none';
+  document.getElementById('camPh').style.display = 'flex';
+  document.getElementById('sf').classList.remove('on');
+  document.getElementById('sl').classList.remove('on');
+}
+async function analyzeCamera() {
+  const el = document.getElementById('at');
+  el.textContent = '解析中...'; el.className = 'at loading';
+
+  if (camStream) {
+    // 実カメラがある場合はClaude APIで解析
+    const v = document.getElementById('camVideo');
+    const cv = document.getElementById('canvas');
+    cv.width = v.videoWidth||640; cv.height = v.videoHeight||480;
+    cv.getContext('2d').drawImage(v, 0, 0);
+    const b64 = cv.toDataURL('image/jpeg', 0.8).split(',')[1];
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          model: claudeModel, max_tokens: 300,
+          messages: [{ role:'user', content: [
+            { type:'image', source:{type:'base64',media_type:'image/jpeg',data:b64} },
+            { type:'text', text:'視覚・身体障害者向け支援AIです。場所・環境・危険な障害物・移動アドバイスを100字以内でやさしく説明してください。' }
+          ]}]
+        })
+      });
+      const d = await res.json();
+      const r = d.content?.[0]?.text || '';
+      if (r) { el.textContent = r; el.className = 'at'; speak(r); return; }
+    } catch {}
+  }
+  // カメラなし or API失敗 → モック解析
+  mockAnalyze();
+}
+function mockAnalyze() {
+  const el = document.getElementById('at');
+  el.textContent = '解析中...'; el.className = 'at loading';
+  setTimeout(() => {
+    const result = MOCK_ANALYSIS[Math.floor(Math.random() * MOCK_ANALYSIS.length)];
+    el.textContent = result; el.className = 'at';
+    speak(result);
+  }, 1500);
+}
+
+// ===== 音声認識 =====
+function setupSR() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { document.getElementById('vs').textContent = '⚠ 音声認識非対応（ボタンで操作できます）'; return; }
+  recognition = new SR(); recognition.lang = 'ja-JP'; recognition.continuous = false; recognition.interimResults = true;
+  recognition.onresult = e => {
+    const t = Array.from(e.results).map(r => r[0].transcript).join('');
+    document.getElementById('vt').textContent = t;
+    if (e.results[0].isFinal) processCmd(t);
+  };
+  recognition.onend = () => { isListening = false; document.getElementById('vbtn').className = 'vbtn'; document.getElementById('vs').textContent = 'マイクをタップして音声入力'; };
+  recognition.onerror = () => { isListening = false; document.getElementById('vbtn').className = 'vbtn'; };
+}
+function toggleVoice() {
+  if (!recognition) { showToast('音声認識非対応'); return; }
+  if (isListening) { recognition.stop(); return; }
+  recognition.start(); isListening = true;
+  document.getElementById('vbtn').className = 'vbtn on';
+  document.getElementById('vs').textContent = '聞いています...';
+  setDot('listen');
+}
+function processCmd(text) {
+  setDot('active');
+  const nbs = document.querySelectorAll('.nb');
+  if (text.includes('周囲')||text.includes('確認')||text.includes('見て')) {
+    setTab(nbs[1],'camera'); if (!camStream) toggleCam(); else analyzeCamera();
+  } else if (text.includes('現在地')||text.includes('どこ')||text.includes('位置')||text.includes('場所')) {
+    // AIタブに切り替えて即座に現在地を音声回答
+    const aiTab = document.querySelectorAll('.nb')[3];
+    if (aiTab) setTab(aiTab, 'ai');
+    const addr = CURRENT_LOCATION.address || MOCK_LOCATION.address;
+    const isReal = CURRENT_LOCATION.isReal;
+    const locMsg = isReal
+      ? `現在地は${addr}です。`
+      : `現在地情報はモックです。${addr}付近です。`;
+    addBubble('ai', locMsg);
+    speak(locMsg);
+    chatHistory.push({ role: 'user', content: text });
+    chatHistory.push({ role: 'assistant', content: locMsg });
+    setTimeout(() => { if (aiRecognition && !aiListening) toggleAiVoice(); }, 3000);
+  } else if (text.includes('トイレ')) {
+    setTab(nbs[2],'map'); setCat(document.querySelectorAll('.cat-chip')[1],'toilet');
+    speak('近くのバリアフリートイレを表示します');
+  } else if (text.includes('病院')||text.includes('救急')) {
+    setTab(nbs[2],'map'); setCat(document.querySelectorAll('.cat-chip')[0],'hospital');
+    speak('近くの病院を表示します');
+  } else if (text.includes('コンビニ')) {
+    setTab(nbs[2],'map'); setCat(document.querySelectorAll('.cat-chip')[3],'convenience');
+    speak('近くのコンビニを表示します');
+  } else if (text.includes('薬')) {
+    setTab(nbs[2],'map'); setCat(document.querySelectorAll('.cat-chip')[2],'pharmacy');
+    speak('近くの薬局を表示します');
+  } else if (text.includes('助け')||text.includes('緊急')||text.includes('SOS')) {
+    mockEmergency();
+  } else {
+    speak('ご要望を承りました。周辺の施設を確認してください');
+    showToast('💬 「' + text + '」を受け取りました');
+  }
+}
+function runCmd(cmd) { document.getElementById('vt').textContent = cmd; processCmd(cmd); }
+
+// ===== 音声合成 =====
+function speak(t) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(t);
+  u.lang = 'ja-JP';
+  u.rate = voiceRate || 0.9;
+  u.pitch = voicePitch || 1.4;
+  u.volume = 1.0;
+
+  const voices = window.speechSynthesis.getVoices();
+
+  // 手動選択された音声を優先
+  if (selectedVoiceName) {
+    const selected = voices.find(v => v.name === selectedVoiceName);
+    if (selected) { u.voice = selected; }
+  } else if (voiceGender === 'female') {
+    const v = voices.find(v => v.lang.startsWith('ja') && (
+      v.name.includes('Kyoko') || v.name.includes('O-ren') ||
+      v.name.includes('Female') || v.name.includes('女')
+    )) || voices.find(v => v.lang.startsWith('ja'));
+    if (v) u.voice = v;
+  } else {
+    const v = voices.find(v => v.lang.startsWith('ja') && (
+      v.name.includes('Otoya') || v.name.includes('Male') || v.name.includes('男')
+    )) || voices.find(v => v.lang.startsWith('ja'));
+    if (v) u.voice = v;
+  }
+
+  window.speechSynthesis.speak(u);
+}
+
+window.speechSynthesis.onvoiceschanged = () => { loadVoiceList(); };
+
+// ===== UI ヘルパー =====
+function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2500); }
+function setDot(s) { document.getElementById('dot').className = 'status-dot' + (s?' '+s:''); }
+function setTab(btn, tab) {
+  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-view').forEach(v=>v.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-'+tab).classList.add('active');
+  if (tab==='camera' && !camStream) toggleCam();
+  if (tab==='map') { updateMapMarkers(curCat); }
+}
+
+// ===== AIアシスタント（音声会話） =====
+let aiListening = false, aiRecognition = null;
+const chatHistory = [];
+
+function setupAiVoice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return;
+  aiRecognition = new SR();
+  aiRecognition.lang = 'ja-JP';
+  aiRecognition.continuous = false;
+  aiRecognition.interimResults = true;
+  aiRecognition.onresult = e => {
+    const t = Array.from(e.results).map(r => r[0].transcript).join('');
+    document.getElementById('aiTextInput').value = t;
+    if (e.results[0].isFinal) { stopAiListen(); aiAsk(t); }
+  };
+  aiRecognition.onend = () => stopAiListen();
+  aiRecognition.onerror = () => stopAiListen();
+}
+
+function toggleAiVoice() {
+  if (aiListening) { stopAiListen(); return; }
+  if (!aiRecognition) {
+    showToast('音声認識非対応 — テキストで入力してください');
+    return;
+  }
+  try {
+    aiRecognition.start();
+    aiListening = true;
+    document.getElementById('aiOrb').classList.add('listening');
+    document.getElementById('aiMicBtn').classList.add('on');
+    document.getElementById('aiStatus').textContent = '🎤 聞いています...';
+  } catch(e) {
+    // すでに起動中の場合は無視
+    console.warn('aiRecognition start error:', e);
+  }
+}
+
+function stopAiListen() {
+  aiListening = false;
+  try { aiRecognition?.stop(); } catch {}
+  document.getElementById('aiOrb').classList.remove('listening');
+  document.getElementById('aiMicBtn').classList.remove('on');
+  document.getElementById('aiStatus').textContent = '話しかけてください 🎤';
+}
+
+function aiSendText() {
+  const input = document.getElementById('aiTextInput');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  aiAsk(text);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const inp = document.getElementById('aiTextInput');
+  if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') aiSendText(); });
+});
+
+// APIキー設定
+const OPENAI_KEY = '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';
+
+// 回答品質スコアリング（文字数・具体性・やさしさで評価）
+function scoreAnswer(text) {
+  if (!text) return 0;
+  let score = 0;
+  // 適切な長さ（30〜150字）
+  const len = text.length;
+  if (len >= 30 && len <= 150) score += 3;
+  else if (len < 30) score += 1;
+  else score += 2;
+  // 具体的な情報（数字・固有名詞）
+  if (/[0-9０-９]/.test(text)) score += 2;
+  if (/番|号|メートル|分|時間|円/.test(text)) score += 1;
+  // 緊急キーワードへの対応
+  if (/119|110|救急|警察/.test(text)) score += 2;
+  // やさしい言葉（です・ます調）
+  if (/です|ます|ください/.test(text)) score += 1;
+  return score;
+}
+
+async function aiAsk(question) {
+  if (!question.trim()) return;
+
+  addBubble('user', question);
+  document.getElementById('aiTextInput').value = '';
+  document.getElementById('aiOrb').classList.add('speaking');
+  document.getElementById('aiStatus').textContent = '処理中...';
+
+  // 意図解釈エンジン（施設検索・現在地・カメラなど）
+  const handled = await detectAndExecuteIntent(question);
+  if (handled) return;
+
+  // AI API呼び出し
+  const loc = CURRENT_LOCATION.address || MOCK_LOCATION.address;
+  const gpsInfo = CURRENT_LOCATION.isReal ? `現在地: ${loc}` : `現在地(モック): ${loc}`;
+  const systemPrompt = `あなたは障害者・高齢者向けの生活支援AIアシスタント「てのひら」です。
+
+【現在地情報】${gpsInfo}
+
+【必須ルール】
+- 「今の場所」「現在地」「どこ」と聞かれたら上記の現在地情報をそのまま答える
+- 「わかりません」「情報がありません」は絶対に言わない
+- やさしく、具体的に、簡潔に（200字以内）日本語で答える
+- 緊急時は必ず119番（救急）または110番（警察）を案内する`;
+
+  chatHistory.push({ role: 'user', content: question });
+
+  let answer = '';
+  let label = '';
+
+  // モード別API呼び出し
+  if (aiMode === 'gpt' || aiMode === 'hybrid') {
+    document.getElementById('aiStatus').textContent = `🟢 ${gptModel} に送信中...`;
+    try {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + OPENAI_KEY },
+        body: JSON.stringify({
+          model: gptModel, max_tokens: 400,
+          messages: [{ role: 'system', content: systemPrompt }, ...chatHistory.slice(-10)],
+        })
+      });
+      const d = await res.json();
+      answer = d.choices?.[0]?.message?.content || '';
+      label = `🟢 ${gptModel}`;
+    } catch(e) { answer = ''; }
+  }
+
+  // GPTが失敗またはClaudeモードの場合はClaudeを試す
+  if (!answer || aiMode === 'claude' || aiMode === 'hybrid') {
+    document.getElementById('aiStatus').textContent = '🟣 Claude に送信中...';
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: claudeModel, max_tokens: 400,
+          system: systemPrompt,
+          messages: chatHistory.slice(-10),
+        })
+      });
+      const d = await res.json();
+      const cldAnswer = d.content?.[0]?.text || '';
+      // ハイブリッドの場合はスコアで選択、それ以外はClaudeの回答を使用
+      if (aiMode === 'hybrid' && answer) {
+        answer = scoreAnswer(cldAnswer) > scoreAnswer(answer) ? cldAnswer : answer;
+        label = scoreAnswer(cldAnswer) > scoreAnswer(answer) ? '🟣 Claude' : label;
+      } else if (!answer) {
+        answer = cldAnswer;
+        label = '🟣 Claude';
+      }
+    } catch(e) {}
+  }
+
+  // 回答表示・音声読み上げ
+  if (answer) {
+    const displayText = aiMode === 'hybrid' ? `${label} が採用
+
+${answer}` : answer;
+    addBubble('ai', displayText);
+    speak(answer);
+    chatHistory.push({ role: 'assistant', content: answer });
+  } else {
+    // 両API失敗時はローカルフォールバック
+    const fallback = localFallback(question);
+    addBubble('ai', fallback);
+    speak(fallback);
+    chatHistory.push({ role: 'assistant', content: fallback });
+  }
+
+  scheduleNextListen(1000);
+}
+
+function addBubble(cls, text, id) {
+  const log = document.getElementById('chatLog');
+  const div = document.createElement('div');
+  div.className = 'bubble ' + cls;
+  div.textContent = text;
+  if (id) div.id = id;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+function replaceBubble(id, text) {
+  const el = document.getElementById(id);
+  if (el) { el.className = 'bubble ai'; el.textContent = text; }
+  const log = document.getElementById('chatLog');
+  log.scrollTop = log.scrollHeight;
+}
+
+
+// 起動時にAI音声認識セットアップ
+// setupAiVoice は startOnboarding 内で呼び出し済み
+
+
+// ===== 意図解釈 → 自動アクション実行 =====
+async function detectAndExecuteIntent(question) {
+  const q = question;
+
+  // 1. 現在地
+  if (/現在地|今の場所|どこ|いまどこ|場所を教|位置を教/.test(q)) {
+    const addr = CURRENT_LOCATION.address || MOCK_LOCATION.address;
+    const ans = CURRENT_LOCATION.isReal ? `現在地は${addr}です。` : `モック位置は${addr}付近です。`;
+    addBubble('ai', ans); speak(ans);
+    pushHistory(q, ans); scheduleNextListen();
+    return true;
+  }
+
+  // 2. 施設検索（Places API）
+  const placesResult = await searchNearbyPlaces(q);
+  if (placesResult) {
+    const msg = formatPlacesResult(placesResult);
+    addBubble('ai', msg); speak(msg);
+    pushHistory(q, msg); scheduleNextListen();
+    return true;
+  }
+
+  // 3. カメラ解析
+  if (/周囲|周り|確認して|見て|カメラ|障害物|段差/.test(q)) {
+    const aiTab = document.querySelectorAll('.nb')[1];
+    setTab(aiTab, 'camera');
+    if (!camStream) await toggleCam();
+    const msg = 'カメラで周囲を解析します。少々お待ちください。';
+    addBubble('ai', msg); speak(msg);
+    setTimeout(async () => {
+      await analyzeCamera();
+      scheduleNextListen();
+    }, 2000);
+    pushHistory(q, msg);
+    return true;
+  }
+
+  // 4. 緊急
+  if (/助けて|緊急|SOS|救急|119|110/.test(q)) {
+    const addr = CURRENT_LOCATION.address || MOCK_LOCATION.address;
+    const msg = `緊急の場合は119番（救急）または110番（警察）に電話してください。現在地は${addr}です。`;
+    addBubble('ai', msg); speak(msg);
+    pushHistory(q, msg); scheduleNextListen();
+    return true;
+  }
+
+  // 5. GPS更新
+  if (/位置.*更新|GPS.*更新|現在地.*更新|場所.*更新/.test(q)) {
+    const msg = '現在地を更新します。';
+    addBubble('ai', msg); speak(msg);
+    await mockGetLocation();
+    const addr = CURRENT_LOCATION.address || MOCK_LOCATION.address;
+    const ans = `現在地を更新しました。${addr}です。`;
+    addBubble('ai', ans); speak(ans);
+    pushHistory(q, ans); scheduleNextListen();
+    return true;
+  }
+
+  return false; // 意図未検出 → GPTへ
+}
+
+function pushHistory(q, ans) {
+  chatHistory.push({ role: 'user', content: q });
+  chatHistory.push({ role: 'assistant', content: ans });
+}
+
+function scheduleNextListen(ms = 3000) {
+  document.getElementById('aiOrb').classList.remove('speaking');
+  document.getElementById('aiStatus').textContent = '話しかけてください 🎤';
+  setTimeout(() => { if (aiRecognition && !aiListening) toggleAiVoice(); }, ms);
+}
+
+// ===== 音声設定 =====
+let voiceGender = 'female';
+let aiMode = 'hybrid';      // 'hybrid' | 'gpt' | 'claude'
+let gptModel = 'gpt-4o-mini';
+let claudeModel = 'claude-sonnet-4-20250514';
+let voiceRate = 0.9;
+let voicePitch = 1.4;
+let selectedVoiceName = '';
+
+function loadVoiceList() {
+  const voices = window.speechSynthesis.getVoices().filter(v => v.lang.startsWith('ja'));
+  const sel = document.getElementById('voiceSelect');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">自動選択</option>';
+  voices.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v.name;
+    opt.textContent = v.name;
+    sel.appendChild(opt);
+  });
+}
+
+function setVoiceGender(gender) {
+  voiceGender = gender;
+  document.getElementById('btnMale').classList.toggle('active', gender === 'male');
+  document.getElementById('btnFemale').classList.toggle('active', gender === 'female');
+  // pitch自動調整
+  if (gender === 'female') {
+    voicePitch = 1.4;
+  } else {
+    voicePitch = 0.8;
+  }
+  document.getElementById('pitchSlider').value = voicePitch;
+  document.getElementById('pitchVal').textContent = voicePitch;
+  document.getElementById('pitchLabel').textContent = voicePitch + (gender === 'female' ? '（女性）' : '（男性）');
+  selectedVoiceName = '';
+  document.getElementById('voiceSelect').value = '';
+}
+
+function updateRate(val) {
+  voiceRate = parseFloat(val);
+  document.getElementById('rateVal').textContent = val;
+  const labels = { 0.5:'遅い', 0.8:'やや遅い', 0.9:'標準', 1.2:'やや速い', 1.5:'速い', 2.0:'とても速い' };
+  document.getElementById('rateLabel').textContent = val + '（' + (labels[val] || '標準') + '）';
+}
+
+function updatePitch(val) {
+  voicePitch = parseFloat(val);
+  document.getElementById('pitchVal').textContent = val;
+  const p = parseFloat(val);
+  document.getElementById('pitchLabel').textContent = val + (p >= 1.3 ? '（高め）' : p <= 0.9 ? '（低め）' : '（標準）');
+}
+
+function setVoiceByName(name) {
+  selectedVoiceName = name;
+}
+
+function setMonitorInterval(ms, btn) {
+  document.querySelectorAll('#btn5s,#btn10s,#btnOff').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  stopDeviceMonitor();
+  if (ms > 0) {
+    deviceMonitorInterval = setInterval(checkDeviceStates, ms);
+  }
+}
+
+function setAiMode(mode) {
+  aiMode = mode;
+  ['modeHybrid','modeGpt','modeClaude'].forEach(id => {
+    document.getElementById(id)?.classList.remove('active');
+  });
+  const idMap = { hybrid:'modeHybrid', gpt:'modeGpt', claude:'modeClaude' };
+  document.getElementById(idMap[mode])?.classList.add('active');
+  updateModelLabel();
+}
+
+function setGptModel(val) {
+  gptModel = val;
+  updateModelLabel();
+}
+
+function setClaudeModel(val) {
+  claudeModel = val;
+  updateModelLabel();
+}
+
+function updateModelLabel() {
+  const modeLabel = { hybrid:'🔀 ハイブリッド', gpt:'🟢 ChatGPT のみ', claude:'🟣 Claude のみ' };
+  const gptName = gptModel;
+  const cldName = claudeModel.replace('-20250514','').replace('-20251001','');
+  document.getElementById('currentModelLabel').textContent =
+    `${modeLabel[aiMode]}｜GPT: ${gptName}｜Claude: ${cldName}`;
+}
+
+function previewVoice() {
+  speak('こんにちは。てのひらの音声アシスタントです。この声でご案内します。');
+}
+
+// speak関数をsettingに基づいて更新
+
+
+// ===== カメラ・マイク状態監視（5秒間隔） =====
+let deviceMonitorInterval = null;
+let lastCamState = null;
+let lastMicState = null;
+
+async function checkDeviceStates() {
+  // カメラ状態
+  const camOn = !!(camStream && camStream.active);
+
+  // マイク状態（aiRecognitionまたはrecognitionが動いているか）
+  const micOn = aiListening || isListening;
+
+  // 変化があった場合のみ通知
+  const camChanged = lastCamState !== camOn;
+  const micChanged = lastMicState !== micOn;
+
+  if (camChanged || micChanged) {
+    const camMsg = camOn ? 'カメラ オン' : 'カメラ オフ';
+    const micMsg = micOn ? 'マイク オン' : 'マイク オフ';
+
+    // チャットに状態表示
+    const statusMsg = `📷 ${camMsg} ／ 🎤 ${micMsg}`;
+    addBubble('ai', statusMsg);
+
+    // 音声で読み上げ
+    speak(statusMsg);
+
+    lastCamState = camOn;
+    lastMicState = micOn;
+  }
+}
+
+function startDeviceMonitor() {
+  if (deviceMonitorInterval) clearInterval(deviceMonitorInterval);
+  // 初回即時実行
+  lastCamState = null;
+  lastMicState = null;
+  checkDeviceStates();
+  // 5秒間隔で監視
+  deviceMonitorInterval = setInterval(checkDeviceStates, 5000);
+}
+
+function stopDeviceMonitor() {
+  if (deviceMonitorInterval) {
+    clearInterval(deviceMonitorInterval);
+    deviceMonitorInterval = null;
+  }
+}
+
+</script>
+</body>
+</html>
