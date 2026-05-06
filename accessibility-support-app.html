@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<!-- version: mock-20260506-gpsfix -->
+<!-- version: mock-20260506-loc -->
 <title>てのひら — 生活支援アシスタント</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&family=DM+Serif+Display&display=swap');
@@ -185,7 +185,7 @@
   <header>
     <div class="logo">てのひら <span>生活支援アシスタント</span></div>
     <div class="header-right">
-      <span class="mock-badge">MOCK 20260506-GPSFIX</span>
+      <span class="mock-badge">MOCK 20260506-LOC</span>
       <div class="status-dot" id="dot"></div>
     </div>
   </header>
@@ -728,6 +728,8 @@ async function mockGetLocation() {
                   `${lat.toFixed(5)}, ${lon.toFixed(5)} (精度 ±${acc}m)`;
                 showToast('✅ GPS取得完了');
                 initPlacesService();
+                // GPS確定後に現在地を音声で案内
+                speak('現在地は' + addr + 'です');
                 res2();
               }
             );
@@ -956,10 +958,19 @@ function processCmd(text) {
   if (text.includes('周囲')||text.includes('確認')||text.includes('見て')) {
     setTab(nbs[1],'camera'); if (!camStream) toggleCam(); else analyzeCamera();
   } else if (text.includes('現在地')||text.includes('どこ')||text.includes('位置')||text.includes('場所')) {
-    // AIタブに切り替えてaiAskで答える
+    // AIタブに切り替えて即座に現在地を音声回答
     const aiTab = document.querySelectorAll('.nb')[3];
     if (aiTab) setTab(aiTab, 'ai');
-    aiAsk(text);
+    const addr = CURRENT_LOCATION.address || MOCK_LOCATION.address;
+    const isReal = CURRENT_LOCATION.isReal;
+    const locMsg = isReal
+      ? `現在地は${addr}です。`
+      : `現在地情報はモックです。${addr}付近です。`;
+    addBubble('ai', locMsg);
+    speak(locMsg);
+    chatHistory.push({ role: 'user', content: text });
+    chatHistory.push({ role: 'assistant', content: locMsg });
+    setTimeout(() => { if (aiRecognition && !aiListening) toggleAiVoice(); }, 3000);
   } else if (text.includes('トイレ')) {
     setTab(nbs[2],'map'); setCat(document.querySelectorAll('.cat-chip')[1],'toilet');
     speak('近くのバリアフリートイレを表示します');
@@ -1113,6 +1124,22 @@ async function aiAsk(question) {
 
   addBubble('user', question);
   document.getElementById('aiTextInput').value = '';
+
+  // 現在地質問は即答（APIを呼ばずに）
+  if (/現在地|今の場所|どこ|いまどこ|場所を教|位置を教/.test(question)) {
+    const addr = CURRENT_LOCATION.address || MOCK_LOCATION.address;
+    const isReal = CURRENT_LOCATION.isReal;
+    const ans = isReal
+      ? `現在地は${addr}です。`
+      : `現在地情報はモックです。${addr}付近です。`;
+    addBubble('ai', ans);
+    speak(ans);
+    chatHistory.push({ role: 'user', content: question });
+    chatHistory.push({ role: 'assistant', content: ans });
+    document.getElementById('aiStatus').textContent = '話しかけてください 🎤';
+    setTimeout(() => { if (aiRecognition && !aiListening) toggleAiVoice(); }, 3000);
+    return;
+  }
 
   // Google Maps Places APIでリアル施設検索
   const placesResult = await searchNearbyPlaces(question);
