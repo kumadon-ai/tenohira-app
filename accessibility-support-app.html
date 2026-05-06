@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<!-- version: mock-20260506-voice -->
+<!-- version: mock-20260506-gpt -->
 <title>てのひら — 生活支援アシスタント</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&family=DM+Serif+Display&display=swap');
@@ -168,7 +168,7 @@
   <header>
     <div class="logo">てのひら <span>生活支援アシスタント</span></div>
     <div class="header-right">
-      <span class="mock-badge">MOCK 20260506-v</span>
+      <span class="mock-badge">MOCK 20260506-gpt</span>
       <div class="status-dot" id="dot"></div>
     </div>
   </header>
@@ -743,18 +743,20 @@ async function aiAsk(question) {
 緊急時は必ず119番・110番を案内してください。`;
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer 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' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'gpt-4o-mini',
         max_tokens: 400,
-        system: systemPrompt,
-        messages: chatHistory.slice(-10), // 直近10件のみ送信
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...chatHistory.slice(-10),
+        ],
       })
     });
     const data = await res.json();
-    const answer = data.content?.[0]?.text || '申し訳ありません、回答できませんでした。';
+    const answer = data.choices?.[0]?.message?.content || '申し訳ありません、回答できませんでした。';
 
     // ローディングを回答に置換
     replaceBubble(loadId, answer);
