@@ -116,7 +116,7 @@ video{width:100%;height:100%;object-fit:cover;display:none;}
   <header>
     <div class="logo">マイティ 🎤</div>
     <div style="display:flex;align-items:center;gap:8px;">
-      <span class="badge">MIGHTY-v1.0</span>
+      <span class="badge">MIGHTY-v1.1</span>
       <div class="status" id="dot"></div>
     </div>
   </header>
@@ -196,7 +196,7 @@ video{width:100%;height:100%;object-fit:cover;display:none;}
         タップして話しかける
       </div>
       <div style="font-size:0.72rem;color:var(--muted);margin-top:4px;opacity:0.6;">
-        または下のテキストで入力
+        タップでオン/オフ・テキスト入力も可
       </div>
     </div>
 
@@ -278,8 +278,6 @@ const VOICE_COMMANDS = [
   { p:/周り.*見て|周囲.*確認|今すぐ.*解析/,fn: () => goTabCamAnalyze('general') },
 
   // マイク操作
-  { p:/マイク(を止|オフ|停止)/,            fn: () => { stopMic(); speak('マイクを停止しました') } },
-  { p:/マイク(オン|再開|起動)/,            fn: () => { startMic(); resetMicTimer(); speak('マイクを再開しました') } },
 
   // 電話帳・連絡先
   { p:/電話帳|連絡先(を開|を見)/,          fn: () => openContacts() },
