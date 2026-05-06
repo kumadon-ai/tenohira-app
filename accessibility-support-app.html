@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<!-- version: mock-20260506-intent -->
+<!-- version: mock-20260506-addr -->
 <title>てのひら — 生活支援アシスタント</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&family=DM+Serif+Display&display=swap');
@@ -185,7 +185,7 @@
   <header>
     <div class="logo">てのひら <span>生活支援アシスタント</span></div>
     <div class="header-right">
-      <span class="mock-badge">MOCK 20260506-INT</span>
+      <span class="mock-badge">MOCK 20260506-ADDR</span>
       <div class="status-dot" id="dot"></div>
     </div>
   </header>
@@ -680,6 +680,29 @@ function speakAndWait(text, ms) {
 }
 
 // ===== 位置情報（モック） =====
+
+// 住所変換フォールバック（Nominatim）
+async function reverseGeocodeNominatim(lat, lon) {
+  try {
+    const r = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=ja`,
+      { headers: { 'User-Agent': 'tenohira-app/1.0' } }
+    );
+    const d = await r.json();
+    const a = d.address;
+    // 日本の住所形式で組み立て
+    const parts = [
+      a.prefecture || a.state,
+      a.city || a.town || a.village || a.county,
+      a.suburb || a.neighbourhood || a.quarter,
+      a.road || a.pedestrian
+    ].filter(Boolean);
+    return parts.length > 0 ? parts.join('') : (d.display_name?.split(',')[0] || '住所不明');
+  } catch {
+    return '住所を取得できませんでした';
+  }
+}
+
 async function mockGetLocation() {
   setDot('listen');
   document.getElementById('locationText').textContent = '📡 GPS取得中...';
@@ -717,7 +740,8 @@ async function mockGetLocation() {
                     .replace('日本、', '')
                     .replace(/〒[0-9-]+ /, '');
                 } else {
-                  addr = `緯度${lat.toFixed(4)} 経度${lon.toFixed(4)}`;
+                  // Geocoding失敗時はNominatimで再試行
+                  addr = await reverseGeocodeNominatim(lat, lon);
                 }
                 CURRENT_LOCATION.address = addr;
                 CURRENT_LOCATION.lat = lat;
@@ -735,10 +759,14 @@ async function mockGetLocation() {
             );
           });
         } catch(e) {
-          const addr = `緯度${lat.toFixed(4)} 経度${lon.toFixed(4)}`;
+          const addr = await reverseGeocodeNominatim(lat, lon);
           CURRENT_LOCATION.address = addr;
+          CURRENT_LOCATION.lat = lat;
+          CURRENT_LOCATION.lon = lon;
+          CURRENT_LOCATION.isReal = true;
           document.getElementById('locationText').textContent = addr;
           showToast('✅ GPS取得完了');
+          speak('現在地は' + addr + 'です');
         }
         resolve();
       },
@@ -1143,7 +1171,7 @@ async function aiAsk(question) {
 
   const loc = CURRENT_LOCATION.address || MOCK_LOCATION.address;
   const gpsInfo = CURRENT_LOCATION.isReal
-    ? `現在地(GPS実測値): ${loc} [緯度${CURRENT_LOCATION.lat?.toFixed(4)} 経度${CURRENT_LOCATION.lon?.toFixed(4)}]`
+    ? `現在地: ${loc}`
     : `現在地(モック): ${loc}`;
   const systemPrompt = `あなたは障害者・高齢者向けの生活支援AIアシスタント「てのひら」です。
 
