@@ -72,7 +72,7 @@ video{width:100%;height:100%;object-fit:cover;display:none;}
   <header>
     <div class="logo">てのひら 🤲</div>
     <div style="display:flex;align-items:center;gap:8px;">
-      <span class="badge">v20260506-CAM2</span>
+      <span class="badge">v20260506-MIC</span>
       <div class="status" id="dot"></div>
     </div>
   </header>
@@ -135,10 +135,27 @@ video{width:100%;height:100%;object-fit:cover;display:none;}
 
   <!-- AIタブ -->
   <div class="tab" id="tab-ai">
-    <div class="orb-wrap">
-      <div class="orb" id="orb" onclick="toggleMic()">🎤</div>
-      <div class="orb-status" id="orbStatus">タップして話しかける</div>
+
+    <!-- 大きなマイクボタン（中央） -->
+    <div style="display:flex;flex-direction:column;align-items:center;padding:24px 0 16px;">
+      <div id="orb" onclick="toggleMic()" style="
+        width:110px;height:110px;border-radius:50%;
+        border:3px solid var(--accent);
+        background:rgba(56,189,248,0.12);
+        color:var(--accent);font-size:3rem;
+        cursor:pointer;display:flex;align-items:center;justify-content:center;
+        transition:all .3s;position:relative;
+        box-shadow:0 0 0 0 rgba(56,189,248,0.3);
+      ">🎤</div>
+      <div id="orbStatus" style="margin-top:12px;font-size:0.85rem;color:var(--muted);text-align:center;">
+        タップして話しかける
+      </div>
+      <div style="font-size:0.72rem;color:var(--muted);margin-top:4px;opacity:0.6;">
+        または下のテキストで入力
+      </div>
     </div>
+
+    <!-- クイック質問 -->
     <div class="quick">
       <button class="qbtn" onclick="sendMsg('今の場所はどこですか')">📍 現在地</button>
       <button class="qbtn" onclick="sendMsg('近くのトイレを探して')">🚻 トイレ</button>
@@ -146,7 +163,11 @@ video{width:100%;height:100%;object-fit:cover;display:none;}
       <button class="qbtn" onclick="sendMsg('体調が悪いです')">💊 体調</button>
       <button class="qbtn" onclick="sendMsg('緊急です助けてください')">🆘 緊急</button>
     </div>
+
+    <!-- 会話ログ -->
     <div class="chat-wrap" id="chatWrap"></div>
+
+    <!-- テキスト入力 -->
     <div class="input-row">
       <input class="txt-input" id="txtInput" placeholder="メッセージを入力..." onkeydown="if(event.key==='Enter')sendMsg()"/>
       <button class="send-btn" onclick="sendMsg()">➤</button>
@@ -317,10 +338,32 @@ function stopMic() {
 
 function setOrbState(s) {
   const o = document.getElementById('orb');
-  o.className = 'orb' + (s==='listening'?' on':s==='speaking'?' speaking':'');
-  if (s==='listening') o.textContent='🎙️';
-  else if (s==='speaking') o.textContent='💬';
-  else o.textContent='🎤';
+  const status = document.getElementById('orbStatus');
+  if (s === 'listening') {
+    o.style.background = 'rgba(56,189,248,0.25)';
+    o.style.borderColor = 'var(--accent)';
+    o.style.boxShadow = '0 0 0 16px rgba(56,189,248,0.15), 0 0 0 32px rgba(56,189,248,0.06)';
+    o.style.animation = 'pulse 0.8s ease-in-out infinite';
+    o.textContent = '🎙️';
+    status.textContent = '聞いています... 話しかけてください';
+    status.style.color = 'var(--accent)';
+  } else if (s === 'speaking') {
+    o.style.background = 'rgba(129,140,248,0.2)';
+    o.style.borderColor = 'var(--accent2)';
+    o.style.boxShadow = '0 0 0 12px rgba(129,140,248,0.12)';
+    o.style.animation = 'pulse 1.2s ease-in-out infinite';
+    o.textContent = '💬';
+    status.textContent = 'AIが回答中...';
+    status.style.color = 'var(--accent2)';
+  } else {
+    o.style.background = 'rgba(56,189,248,0.12)';
+    o.style.borderColor = 'var(--accent)';
+    o.style.boxShadow = '0 0 0 0 rgba(56,189,248,0.3)';
+    o.style.animation = '';
+    o.textContent = '🎤';
+    status.textContent = 'タップして話しかける';
+    status.style.color = 'var(--muted)';
+  }
 }
 
 function schedNext(ms=2000) {
