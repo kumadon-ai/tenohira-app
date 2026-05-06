@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<!-- version: mock-20260506-setting -->
+<!-- version: mock-20260506-gpsfix -->
 <title>てのひら — 生活支援アシスタント</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&family=DM+Serif+Display&display=swap');
@@ -185,7 +185,7 @@
   <header>
     <div class="logo">てのひら <span>生活支援アシスタント</span></div>
     <div class="header-right">
-      <span class="mock-badge">MOCK 20260506-SET</span>
+      <span class="mock-badge">MOCK 20260506-GPSFIX</span>
       <div class="status-dot" id="dot"></div>
     </div>
   </header>
@@ -691,59 +691,64 @@ async function mockGetLocation() {
     return;
   }
 
-  navigator.geolocation.getCurrentPosition(
-    async (pos) => {
-      const lat = pos.coords.latitude;
-      const lon = pos.coords.longitude;
-      const acc = Math.round(pos.coords.accuracy);
+  // Promiseで包んで完了を待てるようにする
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        const acc = Math.round(pos.coords.accuracy);
 
-      CURRENT_LOCATION = { lat, lon, isReal: true, address: '' };
+        CURRENT_LOCATION = { lat, lon, isReal: true, address: '' };
+        document.getElementById('locationCoords').textContent =
+          `${lat.toFixed(5)}, ${lon.toFixed(5)} (精度 ±${acc}m)`;
+        setDot('active');
 
-      document.getElementById('locationCoords').textContent =
-        `${lat.toFixed(5)}, ${lon.toFixed(5)} (精度 ±${acc}m)`;
-      setDot('active');
-
-      // 逆ジオコーディング（Google Geocoding API）
-      try {
-        const geocoder = new google.maps.Geocoder();
-        geocoder.geocode(
-          { location: { lat, lng: lon }, language: 'ja' },
-          (results, status) => {
-            let addr;
-            if (status === 'OK' && results[0]) {
-              addr = results[0].formatted_address
-                .replace('日本、', '')
-                .replace(/〒[0-9-]+ /, '');
-            } else {
-              addr = `緯度${lat.toFixed(4)} 経度${lon.toFixed(4)}`;
-            }
-            CURRENT_LOCATION.address = addr;
-            CURRENT_LOCATION.lat = lat;
-            CURRENT_LOCATION.lon = lon;
-            CURRENT_LOCATION.isReal = true;
-            document.getElementById('locationText').textContent = addr;
-            document.getElementById('locationCoords').textContent =
-              `${lat.toFixed(5)}, ${lon.toFixed(5)} (精度 ±${acc}m)`;
-            showToast('✅ GPS取得完了');
-            speak('現在地は' + addr + 'です');
-            // Places初期化を確実に実行
-            initPlacesService();
-          }
-        );
-      } catch(e) {
-        const addr = `緯度${lat.toFixed(4)} 経度${lon.toFixed(4)}`;
-        CURRENT_LOCATION.address = addr;
-        document.getElementById('locationText').textContent = addr;
-        showToast('✅ GPS取得完了');
-      }
-    },
-    (err) => {
-      const msgs = { 1:'位置情報の許可が必要です', 2:'GPS取得できません', 3:'タイムアウト' };
-      showToast('⚠ ' + (msgs[err.code]||'GPSエラー') + ' — モック位置を使用');
-      useMockLocation();
-    },
-    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-  );
+        // Google Geocoding APIで住所取得
+        try {
+          await new Promise((res2) => {
+            const geocoder = new google.maps.Geocoder();
+            geocoder.geocode(
+              { location: { lat, lng: lon }, language: 'ja' },
+              (results, status) => {
+                let addr;
+                if (status === 'OK' && results[0]) {
+                  addr = results[0].formatted_address
+                    .replace('日本、', '')
+                    .replace(/〒[0-9-]+ /, '');
+                } else {
+                  addr = `緯度${lat.toFixed(4)} 経度${lon.toFixed(4)}`;
+                }
+                CURRENT_LOCATION.address = addr;
+                CURRENT_LOCATION.lat = lat;
+                CURRENT_LOCATION.lon = lon;
+                CURRENT_LOCATION.isReal = true;
+                document.getElementById('locationText').textContent = addr;
+                document.getElementById('locationCoords').textContent =
+                  `${lat.toFixed(5)}, ${lon.toFixed(5)} (精度 ±${acc}m)`;
+                showToast('✅ GPS取得完了');
+                initPlacesService();
+                res2();
+              }
+            );
+          });
+        } catch(e) {
+          const addr = `緯度${lat.toFixed(4)} 経度${lon.toFixed(4)}`;
+          CURRENT_LOCATION.address = addr;
+          document.getElementById('locationText').textContent = addr;
+          showToast('✅ GPS取得完了');
+        }
+        resolve();
+      },
+      (err) => {
+        const msgs = { 1:'位置情報の許可が必要です', 2:'GPS取得できません', 3:'タイムアウト' };
+        showToast('⚠ ' + (msgs[err.code]||'GPSエラー') + ' — モック位置を使用');
+        useMockLocation();
+        resolve();
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  });
 }
 
 function useMockLocation() {
