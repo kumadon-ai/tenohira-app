@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<!-- version: mock-20260506-gpt2 -->
+<!-- version: mock-20260506-prompt -->
 <title>てのひら — 生活支援アシスタント</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&family=DM+Serif+Display&display=swap');
@@ -169,7 +169,7 @@
   <header>
     <div class="logo">てのひら <span>生活支援アシスタント</span></div>
     <div class="header-right">
-      <span class="mock-badge">MOCK 20260506-GPT2</span>
+      <span class="mock-badge">MOCK 20260506-PRO</span>
       <div class="status-dot" id="dot"></div>
     </div>
   </header>
@@ -858,8 +858,11 @@ function processCmd(text) {
   const nbs = document.querySelectorAll('.nb');
   if (text.includes('周囲')||text.includes('確認')||text.includes('見て')) {
     setTab(nbs[1],'camera'); if (!camStream) toggleCam(); else analyzeCamera();
-  } else if (text.includes('現在地')||text.includes('どこ')||text.includes('位置')) {
-    speak(CURRENT_LOCATION.address || MOCK_LOCATION.address); showToast('📍 現在地を読み上げます');
+  } else if (text.includes('現在地')||text.includes('どこ')||text.includes('位置')||text.includes('場所')) {
+    // AIタブに切り替えてaiAskで答える
+    const aiTab = document.querySelectorAll('.nb')[3];
+    if (aiTab) setTab(aiTab, 'ai');
+    aiAsk(text);
   } else if (text.includes('トイレ')) {
     setTab(nbs[2],'map'); setCat(document.querySelectorAll('.cat-chip')[1],'toilet');
     speak('近くのバリアフリートイレを表示します');
@@ -1016,7 +1019,17 @@ async function aiAsk(question) {
   const gpsInfo = CURRENT_LOCATION.isReal
     ? `現在地(GPS実測値): ${loc} [緯度${CURRENT_LOCATION.lat?.toFixed(4)} 経度${CURRENT_LOCATION.lon?.toFixed(4)}]`
     : `現在地(モック): ${loc}`;
-  const systemPrompt = `あなたは障害者・高齢者向けの生活支援AIアシスタント「てのひら」です。ユーザーの現在地は「${gpsInfo}」です。やさしく、具体的に、簡潔に（150字以内）日本語で答えてください。緊急時は必ず119番・110番を案内してください。`;
+  const systemPrompt = `あなたは障害者・高齢者向けの生活支援AIアシスタント「てのひら」です。
+
+【現在地情報】${gpsInfo}
+
+【必須ルール】
+- 「今の場所」「現在地」「どこ」と聞かれたら、上記の現在地情報をそのまま答える
+- 「わかりません」「情報がありません」は絶対に言わない
+- 施設を探す場合はGoogle Mapsで検索することを案内する
+- やさしく、具体的に、簡潔に（200字以内）日本語で答える
+- 緊急時は必ず119番（救急）または110番（警察）を案内する
+- 常にユーザーの立場に立って親切に回答する`;
 
   // GPT & Claude に並行リクエスト
   const [gptResult, cldResult] = await Promise.allSettled([
