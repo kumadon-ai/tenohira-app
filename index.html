@@ -116,7 +116,7 @@ video{width:100%;height:100%;object-fit:cover;display:none;}
   <header>
     <div class="logo">マイティ 🎤</div>
     <div style="display:flex;align-items:center;gap:8px;">
-      <span class="badge">MIGHTY-v1.3</span>
+      <span class="badge">MIGHTY-v1.4</span>
       <div class="status" id="dot"></div>
     </div>
   </header>
@@ -962,34 +962,21 @@ async function sendMsg(text) {
 
   let ans = '';
 
-  // Claude APIで回答（メイン）
+  // Netlify Function経由でClaude APIを呼び出し
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch('/.netlify/functions/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 300,
-        system: sys,
-        messages: history.slice(-8)
+        message: q,
+        history: history.slice(-8),
+        location: addr || '不明'
       })
     });
     const d = await res.json();
-    ans = d.content?.[0]?.text || '';
-  } catch {}
-
-  // ChatGPTで回答（サブ）
-  if (!ans) {
-    try {
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + OPENAI_KEY },
-        body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 300,
-          messages: [{ role: 'system', content: sys }, ...history.slice(-8)] })
-      });
-      const d = await res.json();
-      ans = d.choices?.[0]?.message?.content || '';
-    } catch {}
+    ans = d.answer || '';
+  } catch(e) {
+    console.error('API error:', e);
   }
 
   if (ans) {
@@ -997,7 +984,8 @@ async function sendMsg(text) {
     speak(ans);
     history.push({ role: 'assistant', content: ans });
   } else {
-    const fb = fallback(q);
+    // スマートフォールバック
+    const fb = smartFallback(q);
     addBubble('ai', fb);
     speak(fb);
   }
@@ -1005,11 +993,18 @@ async function sendMsg(text) {
   schedNext();
 }
 
-function fallback(q) {
-  if (/トイレ/.test(q)) return `近くのトイレをお探しですね。現在地(${addr||'不明'})周辺のトイレはGoogleマップで「多目的トイレ」と検索すると見つかります。`;
-  if (/病院|救急|医院/.test(q)) return `病院が必要でしょうか。緊急の場合は119番へ。現在地は${addr||'不明'}です。`;
-  if (/薬|薬局/.test(q)) return `近くの薬局を探すにはGoogleマップで「薬局」と検索してください。`;
-  return `ご質問ありがとうございます。詳しい案内のためにはネットワーク接続をご確認ください。緊急の場合は119番・110番へ。`;
+function fallback(q) { return smartFallback(q); }
+
+function smartFallback(q) {
+  if (/トイレ|化粧室/.test(q)) { searchMap('公共トイレ バリアフリー'); return `近くのトイレをGoogleマップで検索します。`; }
+  if (/病院|救急|クリニック/.test(q)) { searchMap('病院 救急'); return `近くの病院をGoogleマップで検索します。緊急の場合は119番へ。`; }
+  if (/薬局|ドラッグ/.test(q)) { searchMap('薬局'); return `近くの薬局をGoogleマップで検索します。`; }
+  if (/コンビニ/.test(q)) { searchMap('コンビニエンスストア'); return `近くのコンビニをGoogleマップで検索します。`; }
+  if (/天気|雨/.test(q)) return `現在地(${addr||'不明'})の天気はスマホの天気アプリでご確認ください。`;
+  if (/時間|何時/.test(q)) { reportTime(); return ''; }
+  if (/バッテリー|電池/.test(q)) { reportBattery(); return ''; }
+  if (/助け|緊急/.test(q)) return `緊急の場合は119番（救急）または110番（警察）に電話してください。現在地は${addr||'不明'}です。`;
+  return `「${q.slice(0,15)}」についてですね。もう少し詳しく教えていただけますか？または「近くの病院」「現在地を教えて」などとお話しください。`;
 }
 
 function goAI(msg) {
