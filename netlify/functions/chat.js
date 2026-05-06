@@ -1,6 +1,27 @@
 exports.handler = async (event) => {
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS'
+      },
+      body: ''
+    };
+  }
+
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
+  }
+
+  const OPENAI_KEY = process.env.OPENAI_API_KEY;
+  if (!OPENAI_KEY) {
+    return {
+      statusCode: 200,
+      headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answer: null, error: 'API key not set' })
+    };
   }
 
   const { message, history, location } = JSON.parse(event.body || '{}');
@@ -11,38 +32,38 @@ exports.handler = async (event) => {
 施設を探す場合は「近くの〇〇はGoogleマップで検索できます」と案内してください。
 緊急時は119番・110番を案内してください。`;
 
-  const messages = [
-    ...(history || []).slice(-8),
-    { role: 'user', content: message }
-  ];
-
-  // Claude API
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'anthropic-version': '2023-06-01'
+        'Authorization': `Bearer ${OPENAI_KEY}`
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: 'gpt-4o-mini',
         max_tokens: 300,
-        system,
-        messages
+        messages: [
+          { role: 'system', content: system },
+          ...(history || []).slice(-8),
+          { role: 'user', content: message }
+        ]
       })
     });
     const d = await res.json();
-    const ans = d.content?.[0]?.text;
-    if (ans) return {
+    const ans = d.choices?.[0]?.message?.content;
+    if (ans) {
+      return {
+        statusCode: 200,
+        headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answer: ans, model: 'gpt-4o-mini' })
+      };
+    }
+    throw new Error(JSON.stringify(d));
+  } catch(e) {
+    return {
       statusCode: 200,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify({ answer: ans, model: 'claude' })
+      headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answer: null, error: e.message })
     };
-  } catch {}
-
-  return {
-    statusCode: 200,
-    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-    body: JSON.stringify({ answer: null })
-  };
+  }
 };
