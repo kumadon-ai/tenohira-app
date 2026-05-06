@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<!-- version: mock-20260506-model -->
+<!-- version: mock-20260506-stable -->
 <title>てのひら — 生活支援アシスタント</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&family=DM+Serif+Display&display=swap');
@@ -185,7 +185,7 @@
   <header>
     <div class="logo">てのひら <span>生活支援アシスタント</span></div>
     <div class="header-right">
-      <span class="mock-badge">MOCK 20260506-MDL</span>
+      <span class="mock-badge">MOCK 20260506-STB</span>
       <div class="status-dot" id="dot"></div>
     </div>
   </header>
@@ -1201,117 +1201,89 @@ async function aiAsk(question) {
   document.getElementById('aiOrb').classList.add('speaking');
   document.getElementById('aiStatus').textContent = '処理中...';
 
-  // 意図解釈エンジンで自動実行
+  // 意図解釈エンジン（施設検索・現在地・カメラなど）
   const handled = await detectAndExecuteIntent(question);
   if (handled) return;
 
-  // 2つのローディングバブル
-  const gptId  = 'gpt_'  + Date.now();
-  const cldId  = 'cld_'  + Date.now();
-  const bestId = 'best_' + Date.now();
-
-  document.getElementById('aiOrb').classList.add('speaking');
-  document.getElementById('aiStatus').textContent = 'ChatGPT & Claude に同時送信中...';
-
-  chatHistory.push({ role: 'user', content: question });
-
+  // AI API呼び出し
   const loc = CURRENT_LOCATION.address || MOCK_LOCATION.address;
-  const gpsInfo = CURRENT_LOCATION.isReal
-    ? `現在地: ${loc}`
-    : `現在地(モック): ${loc}`;
+  const gpsInfo = CURRENT_LOCATION.isReal ? `現在地: ${loc}` : `現在地(モック): ${loc}`;
   const systemPrompt = `あなたは障害者・高齢者向けの生活支援AIアシスタント「てのひら」です。
 
 【現在地情報】${gpsInfo}
 
 【必須ルール】
-- 「今の場所」「現在地」「どこ」と聞かれたら、上記の現在地情報をそのまま答える
+- 「今の場所」「現在地」「どこ」と聞かれたら上記の現在地情報をそのまま答える
 - 「わかりません」「情報がありません」は絶対に言わない
-- 施設を探す場合はGoogle Mapsで検索することを案内する
 - やさしく、具体的に、簡潔に（200字以内）日本語で答える
-- 緊急時は必ず119番（救急）または110番（警察）を案内する
-- 常にユーザーの立場に立って親切に回答する`;
+- 緊急時は必ず119番（救急）または110番（警察）を案内する`;
 
-  // モード別にAPIコール
-  let bestText = '';
-  let winLabel = '';
+  chatHistory.push({ role: 'user', content: question });
 
-  const callGPT = () => fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + OPENAI_KEY },
-    body: JSON.stringify({
-      model: gptModel, max_tokens: 400,
-      messages: [{ role: 'system', content: systemPrompt }, ...chatHistory.slice(-10)],
-    })
-  }).then(r => r.json()).then(d => d.choices?.[0]?.message?.content || '');
+  let answer = '';
+  let label = '';
 
-  const callClaude = () => fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: claudeModel, max_tokens: 400,
-      system: systemPrompt,
-      messages: chatHistory.slice(-10),
-    })
-  }).then(r => r.json()).then(d => d.content?.[0]?.text || '');
-
-  if (aiMode === 'gpt') {
-    // ChatGPTのみ
+  // モード別API呼び出し
+  if (aiMode === 'gpt' || aiMode === 'hybrid') {
     document.getElementById('aiStatus').textContent = `🟢 ${gptModel} に送信中...`;
-    const [res] = await Promise.allSettled([callGPT()]);
-    bestText = res.status === 'fulfilled' ? res.value : '';
-    winLabel = `🟢 ${gptModel}`;
-    addBubble('ai', bestText || 'エラーが発生しました');
-
-  } else if (aiMode === 'claude') {
-    // Claudeのみ
-    document.getElementById('aiStatus').textContent = `🟣 ${claudeModel.split('-').slice(0,3).join('-')} に送信中...`;
-    const [res] = await Promise.allSettled([callClaude()]);
-    bestText = res.status === 'fulfilled' ? res.value : '';
-    winLabel = `🟣 Claude`;
-    addBubble('ai', bestText || 'エラーが発生しました');
-
-  } else {
-    // ハイブリッド：両方送信してスコアで選択
-    document.getElementById('aiStatus').textContent = '🔀 ChatGPT & Claude に同時送信中...';
-    const [gptRes, cldRes] = await Promise.allSettled([callGPT(), callClaude()]);
-    const gptText = gptRes.status === 'fulfilled' ? gptRes.value : '';
-    const cldText = cldRes.status === 'fulfilled' ? cldRes.value : '';
-    const winner = scoreAnswer(gptText) >= scoreAnswer(cldText) ? 'gpt' : 'claude';
-    bestText = winner === 'gpt' ? gptText : cldText;
-    const loseText = winner === 'gpt' ? cldText : gptText;
-    winLabel = winner === 'gpt' ? `🟢 ${gptModel}` : '🟣 Claude';
-    const loseLabel = winner === 'gpt' ? '🟣 Claude' : `🟢 ${gptModel}`;
-    addBubble('ai', `${winLabel} が採用
-
-${bestText}`);
-    // 比較表示
-    if (gptText && cldText) {
-      const log = document.getElementById('chatLog');
-      const detail = document.createElement('div');
-      detail.style.cssText = 'margin:0 0 4px 0;font-size:0.7rem;color:var(--muted);cursor:pointer;text-align:center;';
-      detail.textContent = `▼ ${loseLabel}の回答を見る`;
-      detail.onclick = () => {
-        const sub = document.createElement('div');
-        sub.className = 'bubble ai'; sub.style.opacity = '0.65';
-        sub.textContent = loseText;
-        detail.replaceWith(sub);
-        log.scrollTop = log.scrollHeight;
-      };
-      log.appendChild(detail);
-      log.scrollTop = log.scrollHeight;
-    }
+    try {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + OPENAI_KEY },
+        body: JSON.stringify({
+          model: gptModel, max_tokens: 400,
+          messages: [{ role: 'system', content: systemPrompt }, ...chatHistory.slice(-10)],
+        })
+      });
+      const d = await res.json();
+      answer = d.choices?.[0]?.message?.content || '';
+      label = `🟢 ${gptModel}`;
+    } catch(e) { answer = ''; }
   }
 
-  chatHistory.push({ role: 'assistant', content: bestText });
+  // GPTが失敗またはClaudeモードの場合はClaudeを試す
+  if (!answer || aiMode === 'claude' || aiMode === 'hybrid') {
+    document.getElementById('aiStatus').textContent = '🟣 Claude に送信中...';
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: claudeModel, max_tokens: 400,
+          system: systemPrompt,
+          messages: chatHistory.slice(-10),
+        })
+      });
+      const d = await res.json();
+      const cldAnswer = d.content?.[0]?.text || '';
+      // ハイブリッドの場合はスコアで選択、それ以外はClaudeの回答を使用
+      if (aiMode === 'hybrid' && answer) {
+        answer = scoreAnswer(cldAnswer) > scoreAnswer(answer) ? cldAnswer : answer;
+        label = scoreAnswer(cldAnswer) > scoreAnswer(answer) ? '🟣 Claude' : label;
+      } else if (!answer) {
+        answer = cldAnswer;
+        label = '🟣 Claude';
+      }
+    } catch(e) {}
+  }
 
-  speak(bestText);
-  document.getElementById('aiOrb').classList.remove('speaking');
-  document.getElementById('aiStatus').textContent = `${winLabel} を読み上げ中`;
-  window.speechSynthesis.addEventListener('end', () => {
-    document.getElementById('aiStatus').textContent = '話しかけてください 🎤';
-    // 回答後に自動で音声認識を再開
-    scheduleNextListen(800);
-  }, { once: true });
+  // 回答表示・音声読み上げ
+  if (answer) {
+    const displayText = aiMode === 'hybrid' ? `${label} が採用
+
+${answer}` : answer;
+    addBubble('ai', displayText);
+    speak(answer);
+    chatHistory.push({ role: 'assistant', content: answer });
+  } else {
+    // 両API失敗時はローカルフォールバック
+    const fallback = localFallback(question);
+    addBubble('ai', fallback);
+    speak(fallback);
+    chatHistory.push({ role: 'assistant', content: fallback });
+  }
+
+  scheduleNextListen(1000);
 }
 
 function addBubble(cls, text, id) {
