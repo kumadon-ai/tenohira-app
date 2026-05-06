@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<!-- version: mock-20260506-loc -->
+<!-- version: mock-20260506-intent -->
 <title>てのひら — 生活支援アシスタント</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&family=DM+Serif+Display&display=swap');
@@ -185,7 +185,7 @@
   <header>
     <div class="logo">てのひら <span>生活支援アシスタント</span></div>
     <div class="header-right">
-      <span class="mock-badge">MOCK 20260506-LOC</span>
+      <span class="mock-badge">MOCK 20260506-INT</span>
       <div class="status-dot" id="dot"></div>
     </div>
   </header>
@@ -1124,36 +1124,12 @@ async function aiAsk(question) {
 
   addBubble('user', question);
   document.getElementById('aiTextInput').value = '';
+  document.getElementById('aiOrb').classList.add('speaking');
+  document.getElementById('aiStatus').textContent = '処理中...';
 
-  // 現在地質問は即答（APIを呼ばずに）
-  if (/現在地|今の場所|どこ|いまどこ|場所を教|位置を教/.test(question)) {
-    const addr = CURRENT_LOCATION.address || MOCK_LOCATION.address;
-    const isReal = CURRENT_LOCATION.isReal;
-    const ans = isReal
-      ? `現在地は${addr}です。`
-      : `現在地情報はモックです。${addr}付近です。`;
-    addBubble('ai', ans);
-    speak(ans);
-    chatHistory.push({ role: 'user', content: question });
-    chatHistory.push({ role: 'assistant', content: ans });
-    document.getElementById('aiStatus').textContent = '話しかけてください 🎤';
-    setTimeout(() => { if (aiRecognition && !aiListening) toggleAiVoice(); }, 3000);
-    return;
-  }
-
-  // Google Maps Places APIでリアル施設検索
-  const placesResult = await searchNearbyPlaces(question);
-  if (placesResult) {
-    const msg = formatPlacesResult(placesResult);
-    addBubble('ai', msg);
-    speak(msg);
-    chatHistory.push({ role: 'user', content: question });
-    chatHistory.push({ role: 'assistant', content: msg });
-    document.getElementById('aiOrb').classList.remove('speaking');
-    document.getElementById('aiStatus').textContent = '話しかけてください 🎤';
-    setTimeout(() => { if (aiRecognition && !aiListening) toggleAiVoice(); }, 3000);
-    return;
-  }
+  // 意図解釈エンジンで自動実行
+  const handled = await detectAndExecuteIntent(question);
+  if (handled) return;
 
   // 2つのローディングバブル
   const gptId  = 'gpt_'  + Date.now();
@@ -1248,9 +1224,7 @@ ${bestText}`, bestId);
   window.speechSynthesis.addEventListener('end', () => {
     document.getElementById('aiStatus').textContent = '話しかけてください 🎤';
     // 回答後に自動で音声認識を再開
-    setTimeout(() => {
-      if (aiRecognition && !aiListening) toggleAiVoice();
-    }, 800);
+    scheduleNextListen(800);
   }, { once: true });
 }
 
@@ -1274,6 +1248,79 @@ function replaceBubble(id, text) {
 
 // 起動時にAI音声認識セットアップ
 // setupAiVoice は startOnboarding 内で呼び出し済み
+
+
+// ===== 意図解釈 → 自動アクション実行 =====
+async function detectAndExecuteIntent(question) {
+  const q = question;
+
+  // 1. 現在地
+  if (/現在地|今の場所|どこ|いまどこ|場所を教|位置を教/.test(q)) {
+    const addr = CURRENT_LOCATION.address || MOCK_LOCATION.address;
+    const ans = CURRENT_LOCATION.isReal ? `現在地は${addr}です。` : `モック位置は${addr}付近です。`;
+    addBubble('ai', ans); speak(ans);
+    pushHistory(q, ans); scheduleNextListen();
+    return true;
+  }
+
+  // 2. 施設検索（Places API）
+  const placesResult = await searchNearbyPlaces(q);
+  if (placesResult) {
+    const msg = formatPlacesResult(placesResult);
+    addBubble('ai', msg); speak(msg);
+    pushHistory(q, msg); scheduleNextListen();
+    return true;
+  }
+
+  // 3. カメラ解析
+  if (/周囲|周り|確認して|見て|カメラ|障害物|段差/.test(q)) {
+    const aiTab = document.querySelectorAll('.nb')[1];
+    setTab(aiTab, 'camera');
+    if (!camStream) await toggleCam();
+    const msg = 'カメラで周囲を解析します。少々お待ちください。';
+    addBubble('ai', msg); speak(msg);
+    setTimeout(async () => {
+      await analyzeCamera();
+      scheduleNextListen();
+    }, 2000);
+    pushHistory(q, msg);
+    return true;
+  }
+
+  // 4. 緊急
+  if (/助けて|緊急|SOS|救急|119|110/.test(q)) {
+    const addr = CURRENT_LOCATION.address || MOCK_LOCATION.address;
+    const msg = `緊急の場合は119番（救急）または110番（警察）に電話してください。現在地は${addr}です。`;
+    addBubble('ai', msg); speak(msg);
+    pushHistory(q, msg); scheduleNextListen();
+    return true;
+  }
+
+  // 5. GPS更新
+  if (/位置.*更新|GPS.*更新|現在地.*更新|場所.*更新/.test(q)) {
+    const msg = '現在地を更新します。';
+    addBubble('ai', msg); speak(msg);
+    await mockGetLocation();
+    const addr = CURRENT_LOCATION.address || MOCK_LOCATION.address;
+    const ans = `現在地を更新しました。${addr}です。`;
+    addBubble('ai', ans); speak(ans);
+    pushHistory(q, ans); scheduleNextListen();
+    return true;
+  }
+
+  return false; // 意図未検出 → GPTへ
+}
+
+function pushHistory(q, ans) {
+  chatHistory.push({ role: 'user', content: q });
+  chatHistory.push({ role: 'assistant', content: ans });
+}
+
+function scheduleNextListen(ms = 3000) {
+  document.getElementById('aiOrb').classList.remove('speaking');
+  document.getElementById('aiStatus').textContent = '話しかけてください 🎤';
+  setTimeout(() => { if (aiRecognition && !aiListening) toggleAiVoice(); }, ms);
+}
 
 // ===== 音声設定 =====
 let voiceGender = 'female';
