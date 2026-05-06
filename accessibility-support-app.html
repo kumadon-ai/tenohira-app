@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<!-- version: mock-20260506-gps -->
+<!-- version: mock-20260506-onboard -->
 <title>てのひら — 生活支援アシスタント</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&family=DM+Serif+Display&display=swap');
@@ -168,7 +168,7 @@
   <header>
     <div class="logo">てのひら <span>生活支援アシスタント</span></div>
     <div class="header-right">
-      <span class="mock-badge">MOCK 20260506-GPS</span>
+      <span class="mock-badge">MOCK 20260506-OB</span>
       <div class="status-dot" id="dot"></div>
     </div>
   </header>
@@ -414,11 +414,94 @@ window.addEventListener('load', () => {
   renderPlaces('hospital');
   setupCam();
   setupSR();
-  // 起動時に自動GPS取得
-  mockGetLocation().then(() => {
-    speak('てのひらを起動しました。現在地を取得しています');
-  });
+  setupAiVoice();
+  // 起動時はAIアシスタントタブを表示してオンボーディング開始
+  setTimeout(startOnboarding, 800);
 });
+
+// ===== オンボーディング（許可取得フロー） =====
+async function startOnboarding() {
+  // AIタブを開く
+  const aiTab = document.querySelectorAll('.nb')[3];
+  if (aiTab) setTab(aiTab, 'ai');
+
+  await aiGreet('アプリ起動時の初回案内');
+}
+
+async function aiGreet(trigger) {
+  const greetMsg = 'てのひらへようこそ。このアプリは位置情報・マイク・カメラを使います。それぞれ許可をお願いします。まず位置情報を取得してもよいですか？';
+  addBubble('ai', greetMsg);
+  speak(greetMsg);
+  document.getElementById('aiStatus').textContent = '許可の確認中...';
+
+  // 音声読み上げ完了後にGPS許可を求める
+  setTimeout(async () => {
+    await requestGPS();
+  }, 3500);
+}
+
+async function requestGPS() {
+  const msg = '位置情報を取得します。ブラウザの許可ダイアログが表示されたら「許可」をタップしてください。';
+  addBubble('ai', msg);
+  speak(msg);
+
+  setTimeout(async () => {
+    await mockGetLocation();
+    // GPS完了後にマイク許可
+    setTimeout(requestMic, 2000);
+  }, 2000);
+}
+
+async function requestMic() {
+  const msg = '次にマイクの許可をお願いします。許可するとアプリを音声で操作できます。';
+  addBubble('ai', msg);
+  speak(msg);
+
+  setTimeout(async () => {
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      const ok = 'マイクの許可をいただきました。音声コマンドが使えます。';
+      addBubble('ai', ok);
+      speak(ok);
+    } catch {
+      const ng = 'マイクは許可されませんでした。ボタン操作でも使えます。';
+      addBubble('ai', ng);
+      speak(ng);
+    }
+    setTimeout(requestCamera, 3000);
+  }, 2500);
+}
+
+async function requestCamera() {
+  const msg = 'カメラの許可をお願いします。周囲の障害物や段差をAIが解析します。';
+  addBubble('ai', msg);
+  speak(msg);
+
+  setTimeout(async () => {
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      s.getTracks().forEach(t => t.stop()); // 確認後すぐ停止
+      const ok = 'カメラの許可をいただきました。';
+      addBubble('ai', ok);
+      speak(ok);
+    } catch {
+      const ng = 'カメラは許可されませんでした。後からカメラタブで許可できます。';
+      addBubble('ai', ng);
+      speak(ng);
+    }
+    setTimeout(onboardingComplete, 3000);
+  }, 2500);
+}
+
+function onboardingComplete() {
+  const addr = CURRENT_LOCATION.address || MOCK_LOCATION.address;
+  const msg = `準備が整いました。現在地は${addr}です。何かお手伝いできることはありますか？`;
+  addBubble('ai', msg);
+  speak(msg);
+  document.getElementById('aiStatus').textContent = 'オーブをタップして話しかける';
+  setDot('active');
+  showToast('✅ セットアップ完了');
+}
 
 // ===== 位置情報（モック） =====
 async function mockGetLocation() {
@@ -900,7 +983,7 @@ function replaceBubble(id, text) {
 
 
 // 起動時にAI音声認識セットアップ
-window.addEventListener('load', setupAiVoice);
+// setupAiVoice は startOnboarding 内で呼び出し済み
 </script>
 </body>
 </html>
