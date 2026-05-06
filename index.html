@@ -116,7 +116,7 @@ video{width:100%;height:100%;object-fit:cover;display:none;}
   <header>
     <div class="logo">マイティ 🎤</div>
     <div style="display:flex;align-items:center;gap:8px;">
-      <span class="badge">MIGHTY-v1.1</span>
+      <span class="badge">MIGHTY-v1.2</span>
       <div class="status" id="dot"></div>
     </div>
   </header>
@@ -927,20 +927,46 @@ async function sendMsg(text) {
 施設を探す場合は「近くの〇〇はマップで検索できます」と案内してください。
 緊急時は119番・110番を案内してください。`;
 
+  let ans = '';
+
+  // Claude APIで回答（メイン）
   try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+OPENAI_KEY},
-      body:JSON.stringify({model:'gpt-4o-mini',max_tokens:300,
-        messages:[{role:'system',content:sys},...history.slice(-8)]})
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 300,
+        system: sys,
+        messages: history.slice(-8)
+      })
     });
     const d = await res.json();
-    const ans = d.choices?.[0]?.message?.content || '';
-    if (ans) { addBubble('ai', ans); speak(ans); history.push({role:'assistant',content:ans}); }
-    else throw new Error('empty');
-  } catch {
+    ans = d.content?.[0]?.text || '';
+  } catch {}
+
+  // ChatGPTで回答（サブ）
+  if (!ans) {
+    try {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + OPENAI_KEY },
+        body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 300,
+          messages: [{ role: 'system', content: sys }, ...history.slice(-8)] })
+      });
+      const d = await res.json();
+      ans = d.choices?.[0]?.message?.content || '';
+    } catch {}
+  }
+
+  if (ans) {
+    addBubble('ai', ans);
+    speak(ans);
+    history.push({ role: 'assistant', content: ans });
+  } else {
     const fb = fallback(q);
-    addBubble('ai', fb); speak(fb);
+    addBubble('ai', fb);
+    speak(fb);
   }
   setOrbState('idle');
   schedNext();
