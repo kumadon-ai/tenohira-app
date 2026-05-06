@@ -72,7 +72,7 @@ video{width:100%;height:100%;object-fit:cover;display:none;}
   <header>
     <div class="logo">てのひら 🤲</div>
     <div style="display:flex;align-items:center;gap:8px;">
-      <span class="badge">v20260506-MIC</span>
+      <span class="badge">v20260506-AUTO</span>
       <div class="status" id="dot"></div>
     </div>
   </header>
@@ -191,8 +191,31 @@ let history = [];
 // ===== 起動 =====
 window.addEventListener('load', () => {
   setupRecog();
+
+  // 起動時にAIタブを表示
+  const aiBtn = document.querySelector('.nb:nth-child(3)');
+  if (aiBtn) setTab(aiBtn, 'ai');
+
+  // GPS取得開始
   getGPS();
-  addBubble('ai', 'てのひらへようこそ。音声またはテキストで話しかけてください。「近くのトイレを探して」「今の場所はどこ？」などと話しかけると案内します。');
+
+  // 起動メッセージ→音声読み上げ→マイク自動スタート
+  const welcome = 'てのひらへようこそ。現在地を取得しています。何でも話しかけてください。';
+  addBubble('ai', welcome);
+
+  // 音声合成の準備を待ってから読み上げ＆マイク起動
+  setTimeout(() => {
+    speak(welcome);
+    // 読み上げ完了後にマイク自動スタート
+    const tryStart = () => {
+      if (!window.speechSynthesis.speaking) {
+        startMic();
+      } else {
+        setTimeout(tryStart, 300);
+      }
+    };
+    setTimeout(tryStart, 2500);
+  }, 500);
 });
 
 // ===== GPS =====
