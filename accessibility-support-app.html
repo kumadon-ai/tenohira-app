@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<!-- version: mock-20260506-fix2 -->
+<!-- version: mock-20260506-maps -->
 <title>てのひら — 生活支援アシスタント</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&family=DM+Serif+Display&display=swap');
@@ -162,13 +162,14 @@
   .qa-chip:hover{background:rgba(129,140,248,0.2);}
 
 </style>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAj3PSk-LUo9ySxDIgRpZ4VAu_v1O9hpyg&libraries=places&language=ja"></script>
 </head>
 <body>
 <div class="app">
   <header>
     <div class="logo">てのひら <span>生活支援アシスタント</span></div>
     <div class="header-right">
-      <span class="mock-badge">MOCK 20260506-FIX2</span>
+      <span class="mock-badge">MOCK 20260506-MAPS</span>
       <div class="status-dot" id="dot"></div>
     </div>
   </header>
@@ -338,6 +339,95 @@
 <div class="toast" id="toast"></div>
 
 <script>
+
+// ===== Google Maps Places API リアル施設検索 =====
+const MAPS_KEY = "AIzaSyAj3PSk-LUo9ySxDIgRpZ4VAu_v1O9hpyg";
+let placesService = null;
+
+function initPlacesService() {
+  if (!window.google || !window.google.maps) return;
+  const dummy = document.createElement('div');
+  placesService = new google.maps.places.PlacesService(dummy);
+}
+
+// 音声コマンドから施設タイプを判定
+function detectPlaceType(text) {
+  if (/トイレ|便所|化粧室/.test(text)) return { type: 'point_of_interest', keyword: 'トイレ 公衆', icon: '🚻', label: 'トイレ' };
+  if (/病院|救急|クリニック|医院/.test(text)) return { type: 'hospital', keyword: '病院', icon: '🏥', label: '病院' };
+  if (/薬局|ドラッグ|薬/.test(text)) return { type: 'pharmacy', keyword: '薬局', icon: '💊', label: '薬局' };
+  if (/コンビニ|セブン|ローソン|ファミマ/.test(text)) return { type: 'convenience_store', keyword: 'コンビニ', icon: '🏪', label: 'コンビニ' };
+  if (/駐車場|パーキング/.test(text)) return { type: 'parking', keyword: '駐車場', icon: '🅿️', label: '駐車場' };
+  if (/駅|電車|地下鉄/.test(text)) return { type: 'subway_station', keyword: '駅', icon: '🚇', label: '駅' };
+  if (/スーパー|食料/.test(text)) return { type: 'supermarket', keyword: 'スーパー', icon: '🛒', label: 'スーパー' };
+  return null;
+}
+
+async function searchNearbyPlaces(text) {
+  const placeType = detectPlaceType(text);
+  if (!placeType) return null;
+  if (!CURRENT_LOCATION.isReal && !CURRENT_LOCATION.lat) return null;
+
+  return new Promise((resolve) => {
+    if (!placesService) initPlacesService();
+    if (!placesService) { resolve(null); return; }
+
+    const location = new google.maps.LatLng(
+      CURRENT_LOCATION.lat || MOCK_LOCATION.lat,
+      CURRENT_LOCATION.lon || MOCK_LOCATION.lon
+    );
+
+    placesService.nearbySearch({
+      location,
+      radius: 1000,
+      type: placeType.type,
+      keyword: placeType.keyword,
+      language: 'ja',
+    }, (results, status) => {
+      if (status === google.maps.places.PlacesServiceStatus.OK && results.length > 0) {
+        const top3 = results.slice(0, 3).map(p => {
+          const lat2 = p.geometry.location.lat();
+          const lon2 = p.geometry.location.lng();
+          const dist = calcDist(
+            CURRENT_LOCATION.lat || MOCK_LOCATION.lat,
+            CURRENT_LOCATION.lon || MOCK_LOCATION.lon,
+            lat2, lon2
+          );
+          return {
+            name: p.name,
+            address: p.vicinity || '',
+            dist,
+            open: p.opening_hours?.isOpen?.(),
+            rating: p.rating,
+            icon: placeType.icon,
+            lat: lat2, lon: lon2,
+          };
+        });
+        resolve({ label: placeType.label, places: top3 });
+      } else {
+        resolve(null);
+      }
+    });
+  });
+}
+
+function calcDist(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dL = (lat2-lat1)*Math.PI/180;
+  const dO = (lon2-lon1)*Math.PI/180;
+  const a = Math.sin(dL/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dO/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+function formatPlacesResult(result) {
+  const lines = result.places.map((p, i) => {
+    const dist = p.dist < 1 ? Math.round(p.dist*1000)+'m' : p.dist.toFixed(1)+'km';
+    const open = p.open === true ? '営業中' : p.open === false ? '休業中' : '';
+    const rating = p.rating ? `⭐${p.rating}` : '';
+    return `${i+1}. ${p.icon}${p.name}（${dist}${open?' '+open:''}${rating?' '+rating:''}）`;
+  }).join('\n');
+  return `近くの${result.label}を${result.places.length}件見つけました。\n${lines}`;
+}
+
 // ===== モックデータ =====
 // 起動時はモック値、GPS取得後に実値で上書き
 const MOCK_LOCATION = { lat: 35.6895, lon: 139.6917, address: '東京都新宿区西新宿2丁目 新宿駅西口付近' };
@@ -410,6 +500,7 @@ let zoomLevel = 16;
 
 // ===== 起動 =====
 window.addEventListener('load', () => {
+  setTimeout(initPlacesService, 1000);
   setDot('active');
   renderPlaces('hospital');
   setupCam();
@@ -882,6 +973,20 @@ async function aiAsk(question) {
 
   addBubble('user', question);
   document.getElementById('aiTextInput').value = '';
+
+  // Google Maps Places APIでリアル施設検索
+  const placesResult = await searchNearbyPlaces(question);
+  if (placesResult) {
+    const msg = formatPlacesResult(placesResult);
+    addBubble('ai', msg);
+    speak(msg);
+    chatHistory.push({ role: 'user', content: question });
+    chatHistory.push({ role: 'assistant', content: msg });
+    document.getElementById('aiOrb').classList.remove('speaking');
+    document.getElementById('aiStatus').textContent = '話しかけてください 🎤';
+    setTimeout(() => { if (aiRecognition && !aiListening) toggleAiVoice(); }, 3000);
+    return;
+  }
 
   // 2つのローディングバブル
   const gptId  = 'gpt_'  + Date.now();
