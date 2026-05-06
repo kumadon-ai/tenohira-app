@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<!-- version: mock-20260506-voice2 -->
+<!-- version: mock-20260506-fix2 -->
 <title>てのひら — 生活支援アシスタント</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&family=DM+Serif+Display&display=swap');
@@ -168,7 +168,7 @@
   <header>
     <div class="logo">てのひら <span>生活支援アシスタント</span></div>
     <div class="header-right">
-      <span class="mock-badge">MOCK 20260506-VC</span>
+      <span class="mock-badge">MOCK 20260506-FIX2</span>
       <div class="status-dot" id="dot"></div>
     </div>
   </header>
@@ -483,7 +483,7 @@ async function onboardingComplete() {
 
   // 準備完了後に音声認識を自動スタート
   setTimeout(() => {
-    if (recognition && !isListening) toggleAiVoice();
+    if (aiRecognition && !aiListening) toggleAiVoice();
   }, 5000);
 }
 
@@ -818,12 +818,20 @@ function setupAiVoice() {
 
 function toggleAiVoice() {
   if (aiListening) { stopAiListen(); return; }
-  if (!aiRecognition) { showToast('音声認識非対応 — テキストで入力してください'); return; }
-  aiRecognition.start();
-  aiListening = true;
-  document.getElementById('aiOrb').classList.add('listening');
-  document.getElementById('aiMicBtn').classList.add('on');
-  document.getElementById('aiStatus').textContent = '聞いています... 話しかけてください';
+  if (!aiRecognition) {
+    showToast('音声認識非対応 — テキストで入力してください');
+    return;
+  }
+  try {
+    aiRecognition.start();
+    aiListening = true;
+    document.getElementById('aiOrb').classList.add('listening');
+    document.getElementById('aiMicBtn').classList.add('on');
+    document.getElementById('aiStatus').textContent = '🎤 聞いています...';
+  } catch(e) {
+    // すでに起動中の場合は無視
+    console.warn('aiRecognition start error:', e);
+  }
 }
 
 function stopAiListen() {
@@ -848,7 +856,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // APIキー設定
-const OPENAI_KEY = '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';
+const OPENAI_KEY = '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';
 
 // 回答品質スコアリング（文字数・具体性・やさしさで評価）
 function scoreAnswer(text) {
@@ -956,7 +964,7 @@ ${bestText}`, bestId);
     document.getElementById('aiStatus').textContent = '話しかけてください 🎤';
     // 回答後に自動で音声認識を再開
     setTimeout(() => {
-      if (recognition && !isListening) toggleAiVoice();
+      if (aiRecognition && !aiListening) toggleAiVoice();
     }, 800);
   }, { once: true });
 }
