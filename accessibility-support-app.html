@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<!-- version: mock-20260506-hybrid -->
+<!-- version: mock-20260506-gps -->
 <title>てのひら — 生活支援アシスタント</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&family=DM+Serif+Display&display=swap');
@@ -168,7 +168,7 @@
   <header>
     <div class="logo">てのひら <span>生活支援アシスタント</span></div>
     <div class="header-right">
-      <span class="mock-badge">MOCK 20260506-hybrid</span>
+      <span class="mock-badge">MOCK 20260506-GPS</span>
       <div class="status-dot" id="dot"></div>
     </div>
   </header>
@@ -177,8 +177,8 @@
   <div class="tab-view active" id="tab-home">
     <div class="card">
       <div class="label">📍 現在地（モック）</div>
-      <div class="location-text" id="locationText">東京都新宿区西新宿2丁目 新宿駅西口付近</div>
-      <div class="location-coords" id="locationCoords">35.68950, 139.69171 (精度 ±8m)</div>
+      <div class="location-text" id="locationText">📡 GPS取得中...</div>
+      <div class="location-coords" id="locationCoords"></div>
       <div class="row">
         <button class="btn-sm" onclick="mockGetLocation()">🔄 更新</button>
         <button class="btn-sm" onclick="mockShare()">📤 共有</button>
@@ -339,7 +339,9 @@
 
 <script>
 // ===== モックデータ =====
+// 起動時はモック値、GPS取得後に実値で上書き
 const MOCK_LOCATION = { lat: 35.6895, lon: 139.6917, address: '東京都新宿区西新宿2丁目 新宿駅西口付近' };
+let CURRENT_LOCATION = { ...MOCK_LOCATION, isReal: false };
 
 const MOCK_PLACES = {
   hospital: [
@@ -409,26 +411,77 @@ let zoomLevel = 16;
 // ===== 起動 =====
 window.addEventListener('load', () => {
   setDot('active');
-  speak('てのひらを起動しました。現在地は' + MOCK_LOCATION.address + 'です');
   renderPlaces('hospital');
   setupCam();
   setupSR();
+  // 起動時に自動GPS取得
+  mockGetLocation().then(() => {
+    speak('てのひらを起動しました。現在地を取得しています');
+  });
 });
 
 // ===== 位置情報（モック） =====
-function mockGetLocation() {
+async function mockGetLocation() {
   setDot('listen');
-  document.getElementById('locationText').textContent = '取得中...';
-  setTimeout(() => {
-    document.getElementById('locationText').textContent = MOCK_LOCATION.address;
-    document.getElementById('locationCoords').textContent = `${MOCK_LOCATION.lat}, ${MOCK_LOCATION.lon} (精度 ±8m)`;
-    setDot('active');
-    showToast('✅ 位置情報を更新しました');
-    speak('現在地を更新しました。' + MOCK_LOCATION.address + 'です');
-  }, 1200);
+  document.getElementById('locationText').textContent = '📡 GPS取得中...';
+  document.getElementById('locationCoords').textContent = '';
+
+  if (!navigator.geolocation) {
+    useMockLocation();
+    showToast('⚠ GPS非対応 — モック位置を使用');
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+      const acc = Math.round(pos.coords.accuracy);
+
+      CURRENT_LOCATION = { lat, lon, isReal: true, address: '' };
+
+      document.getElementById('locationCoords').textContent =
+        `${lat.toFixed(5)}, ${lon.toFixed(5)} (精度 ±${acc}m)`;
+      setDot('active');
+
+      // 逆ジオコーディング（Nominatim）
+      try {
+        const r = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=ja`
+        );
+        const d = await r.json();
+        const a = d.address;
+        const parts = [a.city||a.town||a.village, a.suburb||a.neighbourhood, a.road].filter(Boolean);
+        const addr = parts.join(' ') || d.display_name.split(',')[0];
+        CURRENT_LOCATION.address = addr;
+        document.getElementById('locationText').textContent = addr;
+        showToast('✅ GPS取得完了');
+        speak('現在地は' + addr + 'です');
+      } catch {
+        const addr = `緯度${lat.toFixed(4)} 経度${lon.toFixed(4)}`;
+        CURRENT_LOCATION.address = addr;
+        document.getElementById('locationText').textContent = addr;
+        showToast('✅ GPS取得完了（住所変換失敗）');
+      }
+    },
+    (err) => {
+      const msgs = { 1:'位置情報の許可が必要です', 2:'GPS取得できません', 3:'タイムアウト' };
+      showToast('⚠ ' + (msgs[err.code]||'GPSエラー') + ' — モック位置を使用');
+      useMockLocation();
+    },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+  );
+}
+
+function useMockLocation() {
+  CURRENT_LOCATION = { ...MOCK_LOCATION, isReal: false };
+  document.getElementById('locationText').textContent = '📍 ' + MOCK_LOCATION.address + '（モック）';
+  document.getElementById('locationCoords').textContent =
+    `${MOCK_LOCATION.lat}, ${MOCK_LOCATION.lon} (モック値)`;
+  setDot('active');
 }
 function mockShare() {
-  const url = `https://maps.google.com/?q=${MOCK_LOCATION.lat},${MOCK_LOCATION.lon}`;
+  const url = `https://maps.google.com/?q=${CURRENT_LOCATION.lat},${CURRENT_LOCATION.lon}`;
   navigator.clipboard?.writeText(url).then(() => showToast('📋 位置URLをコピーしました'))
     .catch(() => showToast('📤 ' + url));
 }
@@ -625,7 +678,7 @@ function processCmd(text) {
   if (text.includes('周囲')||text.includes('確認')||text.includes('見て')) {
     setTab(nbs[1],'camera'); if (!camStream) toggleCam(); else analyzeCamera();
   } else if (text.includes('現在地')||text.includes('どこ')||text.includes('位置')) {
-    speak(MOCK_LOCATION.address); showToast('📍 現在地を読み上げます');
+    speak(CURRENT_LOCATION.address || MOCK_LOCATION.address); showToast('📍 現在地を読み上げます');
   } else if (text.includes('トイレ')) {
     setTab(nbs[2],'map'); setCat(document.querySelectorAll('.cat-chip')[1],'toilet');
     speak('近くのバリアフリートイレを表示します');
@@ -756,7 +809,7 @@ async function aiAsk(question) {
 
   chatHistory.push({ role: 'user', content: question });
 
-  const loc = MOCK_LOCATION.address;
+  const loc = CURRENT_LOCATION.address || MOCK_LOCATION.address;
   const systemPrompt = `あなたは障害者・高齢者向けの生活支援AIアシスタント「てのひら」です。ユーザーの現在地は「${loc}」付近です。やさしく、具体的に、簡潔に（150字以内）日本語で答えてください。緊急時は必ず119番・110番を案内してください。`;
 
   // GPT & Claude に並行リクエスト
