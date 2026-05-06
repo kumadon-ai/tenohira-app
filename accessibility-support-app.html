@@ -72,7 +72,7 @@ video{width:100%;height:100%;object-fit:cover;display:none;}
   <header>
     <div class="logo">てのひら 🤲</div>
     <div style="display:flex;align-items:center;gap:8px;">
-      <span class="badge">v20260506-START</span>
+      <span class="badge">v20260506-CMD</span>
       <div class="status" id="dot"></div>
     </div>
   </header>
@@ -269,35 +269,80 @@ async function sendMsg(text) {
   addBubble('user', q);
   setOrbState('speaking');
 
-  // 現在地の即答
-  if (/現在地|今の場所|どこ|いまどこ/.test(q)) {
+  // ===== 音声コマンド→アプリ操作 =====
+
+  // ホーム画面
+  if (/ホーム|最初|トップ|メイン画面/.test(q)) {
+    const btn = document.querySelector('.nb:nth-child(1)');
+    setTab(btn, 'home');
+    const ans = 'ホーム画面に移動しました。';
+    addBubble('ai', ans); speak(ans); setOrbState('idle'); schedNext(); return;
+  }
+
+  // カメラ起動
+  if (/カメラ|撮影|写真|周りを見て|室内|間取り|障害物/.test(q)) {
+    const btn = document.querySelector('.nb:nth-child(2)');
+    setTab(btn, 'cam');
+    await startCam();
+    let mode = 'general';
+    if (/間取り|室内|部屋/.test(q)) mode = 'indoor';
+    else if (/障害物|段差|危険/.test(q)) mode = 'obstacle';
+    else if (/出口|避難|逃げ/.test(q)) mode = 'exit';
+    const ans = 'カメラを起動して解析します。';
+    addBubble('ai', ans); speak(ans);
+    setTimeout(() => analyzeRoom(mode), 1500);
+    setOrbState('idle'); schedNext(); return;
+  }
+
+  // GPS更新
+  if (/GPS|位置.*更新|現在地.*更新|場所.*更新/.test(q)) {
+    const ans = '現在地を更新します。';
+    addBubble('ai', ans); speak(ans);
+    getGPS();
+    setOrbState('idle'); schedNext(); return;
+  }
+
+  // 現在地
+  if (/現在地|今の場所|どこ|いまどこ|場所を教/.test(q)) {
     const ans = addr ? `現在地は${addr}です。` : 'GPS位置情報を取得中です。しばらくお待ちください。';
-    addBubble('ai', ans); speak(ans); setOrbState('idle');
-    schedNext(); return;
+    addBubble('ai', ans); speak(ans); setOrbState('idle'); schedNext(); return;
   }
 
   // 緊急
-  if (/助けて|緊急|SOS|119|救急/.test(q)) {
+  if (/助けて|緊急|SOS|119|救急|倒れ/.test(q)) {
     const ans = `緊急の場合は119番（救急）または110番（警察）に電話してください。現在地は${addr||'不明'}です。`;
-    addBubble('ai', ans); speak(ans); setOrbState('idle');
-    schedNext(); return;
+    addBubble('ai', ans); speak(ans);
+    if (confirm('119番に電話しますか？')) window.location.href = 'tel:119';
+    setOrbState('idle'); schedNext(); return;
   }
 
-  // GPT API
+  // 位置共有
+  if (/位置.*共有|場所.*送|現在地.*送/.test(q)) {
+    sharePos();
+    const ans = '現在地のURLを共有します。';
+    addBubble('ai', ans); speak(ans); setOrbState('idle'); schedNext(); return;
+  }
+
+  // ===== GPT APIで回答 =====
   history.push({role:'user', content:q});
-  const sys = `あなたは障害者・高齢者向け生活支援AIアシスタント「てのひら」です。ユーザーの現在地は「${addr||'不明'}」です。やさしく簡潔に日本語で答えてください（150字以内）。`;
+  const sys = `あなたは障害者・高齢者向け生活支援AIアシスタント「てのひら」です。
+ユーザーの現在地は「${addr||'不明'}」です。
+やさしく簡潔に日本語で答えてください（150字以内）。
+施設を探す場合は「近くの〇〇はマップで検索できます」と案内してください。
+緊急時は119番・110番を案内してください。`;
+
   try {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+OPENAI_KEY},
-      body:JSON.stringify({model:'gpt-4o-mini',max_tokens:300,messages:[{role:'system',content:sys},...history.slice(-8)]})
+      body:JSON.stringify({model:'gpt-4o-mini',max_tokens:300,
+        messages:[{role:'system',content:sys},...history.slice(-8)]})
     });
     const d = await res.json();
     const ans = d.choices?.[0]?.message?.content || '';
     if (ans) { addBubble('ai', ans); speak(ans); history.push({role:'assistant',content:ans}); }
     else throw new Error('empty');
   } catch {
-    // フォールバック
     const fb = fallback(q);
     addBubble('ai', fb); speak(fb);
   }
