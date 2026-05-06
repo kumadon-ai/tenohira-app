@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<!-- version: mock-20260506-monitor -->
+<!-- version: mock-20260506-voice-f -->
 <title>てのひら — 生活支援アシスタント</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&family=DM+Serif+Display&display=swap');
@@ -169,7 +169,7 @@
   <header>
     <div class="logo">てのひら <span>生活支援アシスタント</span></div>
     <div class="header-right">
-      <span class="mock-badge">MOCK 20260506-MON</span>
+      <span class="mock-badge">MOCK 20260506-F</span>
       <div class="status-dot" id="dot"></div>
     </div>
   </header>
@@ -889,9 +889,33 @@ function runCmd(cmd) { document.getElementById('vt').textContent = cmd; processC
 function speak(t) {
   if (!window.speechSynthesis) return;
   window.speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(t); u.lang = 'ja-JP'; u.rate = 0.9; u.pitch = 1.0;
+  const u = new SpeechSynthesisUtterance(t);
+  u.lang = 'ja-JP';
+  u.rate = 0.9;
+  u.pitch = 1.4;  // 高め = 女性らしい声
+  u.volume = 1.0;
+
+  // 女性の声を優先して選択
+  const voices = window.speechSynthesis.getVoices();
+  const femaleVoice = voices.find(v =>
+    v.lang.startsWith('ja') && (
+      v.name.includes('Female') ||
+      v.name.includes('女') ||
+      v.name.includes('Kyoko') ||
+      v.name.includes('O-ren') ||
+      v.name.includes('Otoya') === false && v.name.includes('ja')
+    )
+  ) || voices.find(v => v.lang.startsWith('ja'));
+
+  if (femaleVoice) u.voice = femaleVoice;
   window.speechSynthesis.speak(u);
 }
+
+// 音声リスト読み込み後に再設定（ブラウザによって非同期）
+window.speechSynthesis.onvoiceschanged = () => {
+  const voices = window.speechSynthesis.getVoices();
+  console.log('利用可能な音声:', voices.filter(v=>v.lang.startsWith('ja')).map(v=>v.name));
+};
 
 // ===== UI ヘルパー =====
 function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2500); }
