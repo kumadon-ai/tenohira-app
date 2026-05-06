@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<!-- version: mock-20260506-onboard -->
+<!-- version: mock-20260506-voice2 -->
 <title>てのひら — 生活支援アシスタント</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&family=DM+Serif+Display&display=swap');
@@ -168,7 +168,7 @@
   <header>
     <div class="logo">てのひら <span>生活支援アシスタント</span></div>
     <div class="header-right">
-      <span class="mock-badge">MOCK 20260506-OB</span>
+      <span class="mock-badge">MOCK 20260506-VC</span>
       <div class="status-dot" id="dot"></div>
     </div>
   </header>
@@ -309,7 +309,7 @@
     <div class="ai-hero">
       <div class="ai-orb" id="aiOrb" onclick="toggleAiVoice()">🤖</div>
       <div class="ai-status" id="aiStatus">オーブをタップして話しかける</div>
-      <div class="ai-hint">または下のマイクボタン・テキストで入力</div>
+      <div class="ai-hint">話しかけるだけで操作できます</div>
     </div>
 
     <div class="quick-asks">
@@ -419,88 +419,81 @@ window.addEventListener('load', () => {
   setTimeout(startOnboarding, 800);
 });
 
-// ===== オンボーディング（許可取得フロー） =====
+// ===== オンボーディング（完全音声駆動） =====
+let onboardDone = false;
+
 async function startOnboarding() {
-  // AIタブを開く
+  // AIタブを自動で開く
   const aiTab = document.querySelectorAll('.nb')[3];
   if (aiTab) setTab(aiTab, 'ai');
 
-  await aiGreet('アプリ起動時の初回案内');
+  // Step1: 挨拶 → 自動でGPS・マイク・カメラを順次取得
+  await speakAndWait('てのひらへようこそ。生活支援AIアシスタントです。位置情報、マイク、カメラの準備を自動で行います。', 4000);
+  await doRequestGPS();
 }
 
-async function aiGreet(trigger) {
-  const greetMsg = 'てのひらへようこそ。このアプリは位置情報・マイク・カメラを使います。それぞれ許可をお願いします。まず位置情報を取得してもよいですか？';
-  addBubble('ai', greetMsg);
-  speak(greetMsg);
-  document.getElementById('aiStatus').textContent = '許可の確認中...';
+async function doRequestGPS() {
+  addBubble('ai', '📍 現在地を取得しています...');
+  document.getElementById('aiStatus').textContent = 'GPS取得中...';
 
-  // 音声読み上げ完了後にGPS許可を求める
-  setTimeout(async () => {
-    await requestGPS();
-  }, 3500);
-}
+  await mockGetLocation();
 
-async function requestGPS() {
-  const msg = '位置情報を取得します。ブラウザの許可ダイアログが表示されたら「許可」をタップしてください。';
-  addBubble('ai', msg);
-  speak(msg);
-
-  setTimeout(async () => {
-    await mockGetLocation();
-    // GPS完了後にマイク許可
-    setTimeout(requestMic, 2000);
-  }, 2000);
-}
-
-async function requestMic() {
-  const msg = '次にマイクの許可をお願いします。許可するとアプリを音声で操作できます。';
-  addBubble('ai', msg);
-  speak(msg);
-
-  setTimeout(async () => {
-    try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
-      const ok = 'マイクの許可をいただきました。音声コマンドが使えます。';
-      addBubble('ai', ok);
-      speak(ok);
-    } catch {
-      const ng = 'マイクは許可されませんでした。ボタン操作でも使えます。';
-      addBubble('ai', ng);
-      speak(ng);
-    }
-    setTimeout(requestCamera, 3000);
-  }, 2500);
-}
-
-async function requestCamera() {
-  const msg = 'カメラの許可をお願いします。周囲の障害物や段差をAIが解析します。';
-  addBubble('ai', msg);
-  speak(msg);
-
-  setTimeout(async () => {
-    try {
-      const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-      s.getTracks().forEach(t => t.stop()); // 確認後すぐ停止
-      const ok = 'カメラの許可をいただきました。';
-      addBubble('ai', ok);
-      speak(ok);
-    } catch {
-      const ng = 'カメラは許可されませんでした。後からカメラタブで許可できます。';
-      addBubble('ai', ng);
-      speak(ng);
-    }
-    setTimeout(onboardingComplete, 3000);
-  }, 2500);
-}
-
-function onboardingComplete() {
   const addr = CURRENT_LOCATION.address || MOCK_LOCATION.address;
-  const msg = `準備が整いました。現在地は${addr}です。何かお手伝いできることはありますか？`;
+  await speakAndWait(`現在地を確認しました。${addr}付近です。`, 3000);
+  await doRequestMic();
+}
+
+async function doRequestMic() {
+  await speakAndWait('続いてマイクを準備します。音声でアプリを操作できるようになります。', 3000);
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach(t => t.stop());
+    addBubble('ai', '🎤 マイクの準備ができました');
+    await speakAndWait('マイクの準備ができました。', 2000);
+  } catch {
+    addBubble('ai', '🎤 マイクは利用できません。音声入力以外の方法で操作できます。');
+    await speakAndWait('マイクは利用できませんが、テキスト入力で操作できます。', 3000);
+  }
+  await doRequestCamera();
+}
+
+async function doRequestCamera() {
+  await speakAndWait('カメラを準備します。周囲の障害物や段差をAIが解析します。', 3000);
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    stream.getTracks().forEach(t => t.stop());
+    addBubble('ai', '📷 カメラの準備ができました');
+    await speakAndWait('カメラの準備ができました。', 2000);
+  } catch {
+    addBubble('ai', '📷 カメラは利用できません。後から設定できます。');
+    await speakAndWait('カメラは現在利用できません。', 2000);
+  }
+  await onboardingComplete();
+}
+
+async function onboardingComplete() {
+  onboardDone = true;
+  const addr = CURRENT_LOCATION.address || MOCK_LOCATION.address;
+  const msg = `準備が整いました。現在地は${addr}です。声でご指示ください。たとえば「病院を探して」「周囲を確認して」などと話しかけてください。`;
   addBubble('ai', msg);
   speak(msg);
-  document.getElementById('aiStatus').textContent = 'オーブをタップして話しかける';
+  document.getElementById('aiStatus').textContent = '話しかけてください 🎤';
   setDot('active');
-  showToast('✅ セットアップ完了');
+  showToast('✅ 準備完了 — 話しかけてください');
+
+  // 準備完了後に音声認識を自動スタート
+  setTimeout(() => {
+    if (recognition && !isListening) toggleAiVoice();
+  }, 5000);
+}
+
+// 音声読み上げ＋指定ms待機
+function speakAndWait(text, ms) {
+  return new Promise(resolve => {
+    addBubble('ai', text);
+    speak(text);
+    setTimeout(resolve, ms);
+  });
 }
 
 // ===== 位置情報（モック） =====
@@ -838,7 +831,7 @@ function stopAiListen() {
   try { aiRecognition?.stop(); } catch {}
   document.getElementById('aiOrb').classList.remove('listening');
   document.getElementById('aiMicBtn').classList.remove('on');
-  document.getElementById('aiStatus').textContent = 'オーブをタップして話しかける';
+  document.getElementById('aiStatus').textContent = '話しかけてください 🎤';
 }
 
 function aiSendText() {
@@ -960,7 +953,11 @@ ${bestText}`, bestId);
   document.getElementById('aiOrb').classList.remove('speaking');
   document.getElementById('aiStatus').textContent = `${winLabel} を読み上げ中`;
   window.speechSynthesis.addEventListener('end', () => {
-    document.getElementById('aiStatus').textContent = 'オーブをタップして話しかける';
+    document.getElementById('aiStatus').textContent = '話しかけてください 🎤';
+    // 回答後に自動で音声認識を再開
+    setTimeout(() => {
+      if (recognition && !isListening) toggleAiVoice();
+    }, 800);
   }, { once: true });
 }
 
