@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<!-- version: mock-20260506-prompt -->
+<!-- version: mock-20260506-monitor -->
 <title>てのひら — 生活支援アシスタント</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&family=DM+Serif+Display&display=swap');
@@ -169,7 +169,7 @@
   <header>
     <div class="logo">てのひら <span>生活支援アシスタント</span></div>
     <div class="header-right">
-      <span class="mock-badge">MOCK 20260506-PRO</span>
+      <span class="mock-badge">MOCK 20260506-MON</span>
       <div class="status-dot" id="dot"></div>
     </div>
   </header>
@@ -501,6 +501,7 @@ let zoomLevel = 16;
 // ===== 起動 =====
 window.addEventListener('load', () => {
   setTimeout(initPlacesService, 1000);
+  setTimeout(startDeviceMonitor, 3000); // 起動3秒後に監視開始
   setDot('active');
   renderPlaces('hospital');
   setupCam();
@@ -1124,6 +1125,56 @@ function replaceBubble(id, text) {
 
 // 起動時にAI音声認識セットアップ
 // setupAiVoice は startOnboarding 内で呼び出し済み
+
+// ===== カメラ・マイク状態監視（5秒間隔） =====
+let deviceMonitorInterval = null;
+let lastCamState = null;
+let lastMicState = null;
+
+async function checkDeviceStates() {
+  // カメラ状態
+  const camOn = !!(camStream && camStream.active);
+
+  // マイク状態（aiRecognitionまたはrecognitionが動いているか）
+  const micOn = aiListening || isListening;
+
+  // 変化があった場合のみ通知
+  const camChanged = lastCamState !== camOn;
+  const micChanged = lastMicState !== micOn;
+
+  if (camChanged || micChanged) {
+    const camMsg = camOn ? 'カメラ オン' : 'カメラ オフ';
+    const micMsg = micOn ? 'マイク オン' : 'マイク オフ';
+
+    // チャットに状態表示
+    const statusMsg = `📷 ${camMsg} ／ 🎤 ${micMsg}`;
+    addBubble('ai', statusMsg);
+
+    // 音声で読み上げ
+    speak(statusMsg);
+
+    lastCamState = camOn;
+    lastMicState = micOn;
+  }
+}
+
+function startDeviceMonitor() {
+  if (deviceMonitorInterval) clearInterval(deviceMonitorInterval);
+  // 初回即時実行
+  lastCamState = null;
+  lastMicState = null;
+  checkDeviceStates();
+  // 5秒間隔で監視
+  deviceMonitorInterval = setInterval(checkDeviceStates, 5000);
+}
+
+function stopDeviceMonitor() {
+  if (deviceMonitorInterval) {
+    clearInterval(deviceMonitorInterval);
+    deviceMonitorInterval = null;
+  }
+}
+
 </script>
 </body>
 </html>
