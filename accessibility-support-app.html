@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<!-- version: mock-20260506-addr -->
+<!-- version: mock-20260506-model -->
 <title>てのひら — 生活支援アシスタント</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&family=DM+Serif+Display&display=swap');
@@ -185,7 +185,7 @@
   <header>
     <div class="logo">てのひら <span>生活支援アシスタント</span></div>
     <div class="header-right">
-      <span class="mock-badge">MOCK 20260506-ADDR</span>
+      <span class="mock-badge">MOCK 20260506-MDL</span>
       <div class="status-dot" id="dot"></div>
     </div>
   </header>
@@ -401,6 +401,52 @@
 
       <!-- プレビュー -->
       <button class="voice-preview-btn" onclick="previewVoice()">🔊 この設定で試し聴き</button>
+    </div>
+
+    <div class="setting-section">
+      <div class="setting-title">🤖 AIモデル設定</div>
+
+      <!-- AIモード選択 -->
+      <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:10px;">
+        <div>
+          <div class="setting-label">動作モード</div>
+          <div class="setting-sub">どのAIを使って回答するか</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="seg-btn active" id="modeHybrid" onclick="setAiMode('hybrid')">🔀 ハイブリッド</button>
+          <button class="seg-btn" id="modeGpt" onclick="setAiMode('gpt')">🟢 ChatGPT</button>
+          <button class="seg-btn" id="modeClaude" onclick="setAiMode('claude')">🟣 Claude</button>
+        </div>
+      </div>
+
+      <!-- ChatGPTモデル選択 -->
+      <div class="setting-row" style="flex-direction:column;align-items:flex-start;" id="gptModelRow">
+        <div class="setting-label">ChatGPTモデル</div>
+        <select class="voice-select" id="gptModelSelect" onchange="setGptModel(this.value)">
+          <option value="gpt-4o-mini" selected>gpt-4o-mini（軽量・高速）</option>
+          <option value="gpt-4o">gpt-4o（高精度）</option>
+          <option value="gpt-4-turbo">gpt-4-turbo</option>
+          <option value="gpt-3.5-turbo">gpt-3.5-turbo（低コスト）</option>
+        </select>
+      </div>
+
+      <!-- Claudeモデル選択 -->
+      <div class="setting-row" style="flex-direction:column;align-items:flex-start;" id="claudeModelRow">
+        <div class="setting-label">Claudeモデル</div>
+        <select class="voice-select" id="claudeModelSelect" onchange="setClaudeModel(this.value)">
+          <option value="claude-sonnet-4-20250514" selected>claude-sonnet-4（バランス）</option>
+          <option value="claude-opus-4-5">claude-opus-4（最高精度）</option>
+          <option value="claude-haiku-4-5-20251001">claude-haiku-4（高速）</option>
+        </select>
+      </div>
+
+      <!-- 現在の設定表示 -->
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">現在の設定</div>
+          <div class="setting-sub" id="currentModelLabel">🔀 ハイブリッド｜GPT: gpt-4o-mini｜Claude: claude-sonnet-4</div>
+        </div>
+      </div>
     </div>
 
     <div class="setting-section">
@@ -934,7 +980,7 @@ async function analyzeCamera() {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514', max_tokens: 300,
+          model: claudeModel, max_tokens: 300,
           messages: [{ role:'user', content: [
             { type:'image', source:{type:'base64',media_type:'image/jpeg',data:b64} },
             { type:'text', text:'視覚・身体障害者向け支援AIです。場所・環境・危険な障害物・移動アドバイスを100字以内でやさしく説明してください。' }
@@ -1185,63 +1231,75 @@ async function aiAsk(question) {
 - 緊急時は必ず119番（救急）または110番（警察）を案内する
 - 常にユーザーの立場に立って親切に回答する`;
 
-  // GPT & Claude に並行リクエスト
-  const [gptResult, cldResult] = await Promise.allSettled([
-    // ChatGPT
-    fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + OPENAI_KEY },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini', max_tokens: 400,
-        messages: [{ role: 'system', content: systemPrompt }, ...chatHistory.slice(-10)],
-      })
-    }).then(r => r.json()).then(d => d.choices?.[0]?.message?.content || ''),
+  // モード別にAPIコール
+  let bestText = '';
+  let winLabel = '';
 
-    // Claude
-    fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514', max_tokens: 400,
-        system: systemPrompt,
-        messages: chatHistory.slice(-10),
-      })
-    }).then(r => r.json()).then(d => d.content?.[0]?.text || ''),
-  ]);
+  const callGPT = () => fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + OPENAI_KEY },
+    body: JSON.stringify({
+      model: gptModel, max_tokens: 400,
+      messages: [{ role: 'system', content: systemPrompt }, ...chatHistory.slice(-10)],
+    })
+  }).then(r => r.json()).then(d => d.choices?.[0]?.message?.content || '');
 
-  const gptText = gptResult.status === 'fulfilled' ? gptResult.value : '';
-  const cldText = cldResult.status === 'fulfilled' ? cldResult.value : '';
+  const callClaude = () => fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: claudeModel, max_tokens: 400,
+      system: systemPrompt,
+      messages: chatHistory.slice(-10),
+    })
+  }).then(r => r.json()).then(d => d.content?.[0]?.text || '');
 
-  // スコアで良い方を選択
-  const gptScore = scoreAnswer(gptText);
-  const cldScore = scoreAnswer(cldText);
-  const winner   = gptScore >= cldScore ? 'gpt' : 'claude';
-  const bestText = winner === 'gpt' ? gptText : cldText;
-  const winLabel = winner === 'gpt' ? '🟢 ChatGPT' : '🟣 Claude';
-  const loseLabel= winner === 'gpt' ? '🟣 Claude' : '🟢 ChatGPT';
-  const loseText = winner === 'gpt' ? cldText : gptText;
+  if (aiMode === 'gpt') {
+    // ChatGPTのみ
+    document.getElementById('aiStatus').textContent = `🟢 ${gptModel} に送信中...`;
+    const [res] = await Promise.allSettled([callGPT()]);
+    bestText = res.status === 'fulfilled' ? res.value : '';
+    winLabel = `🟢 ${gptModel}`;
+    addBubble('ai', bestText || 'エラーが発生しました');
 
-  // 採用回答を表示
-  addBubble('ai', `${winLabel} が採用されました
+  } else if (aiMode === 'claude') {
+    // Claudeのみ
+    document.getElementById('aiStatus').textContent = `🟣 ${claudeModel.split('-').slice(0,3).join('-')} に送信中...`;
+    const [res] = await Promise.allSettled([callClaude()]);
+    bestText = res.status === 'fulfilled' ? res.value : '';
+    winLabel = `🟣 Claude`;
+    addBubble('ai', bestText || 'エラーが発生しました');
 
-${bestText}`, bestId);
+  } else {
+    // ハイブリッド：両方送信してスコアで選択
+    document.getElementById('aiStatus').textContent = '🔀 ChatGPT & Claude に同時送信中...';
+    const [gptRes, cldRes] = await Promise.allSettled([callGPT(), callClaude()]);
+    const gptText = gptRes.status === 'fulfilled' ? gptRes.value : '';
+    const cldText = cldRes.status === 'fulfilled' ? cldRes.value : '';
+    const winner = scoreAnswer(gptText) >= scoreAnswer(cldText) ? 'gpt' : 'claude';
+    bestText = winner === 'gpt' ? gptText : cldText;
+    const loseText = winner === 'gpt' ? cldText : gptText;
+    winLabel = winner === 'gpt' ? `🟢 ${gptModel}` : '🟣 Claude';
+    const loseLabel = winner === 'gpt' ? '🟣 Claude' : `🟢 ${gptModel}`;
+    addBubble('ai', `${winLabel} が採用
 
-  // 比較ボタン付きで両方の回答をサブ表示
-  if (gptText && cldText) {
-    const log = document.getElementById('chatLog');
-    const detail = document.createElement('div');
-    detail.style.cssText = 'margin:0 0 4px 0;font-size:0.7rem;color:var(--muted);cursor:pointer;text-align:center;';
-    detail.textContent = `▼ ${loseLabel}の回答を見る`;
-    detail.onclick = () => {
-      const sub = document.createElement('div');
-      sub.className = 'bubble ai';
-      sub.style.opacity = '0.65';
-      sub.textContent = loseText;
-      detail.replaceWith(sub);
+${bestText}`);
+    // 比較表示
+    if (gptText && cldText) {
+      const log = document.getElementById('chatLog');
+      const detail = document.createElement('div');
+      detail.style.cssText = 'margin:0 0 4px 0;font-size:0.7rem;color:var(--muted);cursor:pointer;text-align:center;';
+      detail.textContent = `▼ ${loseLabel}の回答を見る`;
+      detail.onclick = () => {
+        const sub = document.createElement('div');
+        sub.className = 'bubble ai'; sub.style.opacity = '0.65';
+        sub.textContent = loseText;
+        detail.replaceWith(sub);
+        log.scrollTop = log.scrollHeight;
+      };
+      log.appendChild(detail);
       log.scrollTop = log.scrollHeight;
-    };
-    log.appendChild(detail);
-    log.scrollTop = log.scrollHeight;
+    }
   }
 
   chatHistory.push({ role: 'assistant', content: bestText });
@@ -1352,6 +1410,9 @@ function scheduleNextListen(ms = 3000) {
 
 // ===== 音声設定 =====
 let voiceGender = 'female';
+let aiMode = 'hybrid';      // 'hybrid' | 'gpt' | 'claude'
+let gptModel = 'gpt-4o-mini';
+let claudeModel = 'claude-sonnet-4-20250514';
 let voiceRate = 0.9;
 let voicePitch = 1.4;
 let selectedVoiceName = '';
@@ -1411,6 +1472,34 @@ function setMonitorInterval(ms, btn) {
   if (ms > 0) {
     deviceMonitorInterval = setInterval(checkDeviceStates, ms);
   }
+}
+
+function setAiMode(mode) {
+  aiMode = mode;
+  ['modeHybrid','modeGpt','modeClaude'].forEach(id => {
+    document.getElementById(id)?.classList.remove('active');
+  });
+  const idMap = { hybrid:'modeHybrid', gpt:'modeGpt', claude:'modeClaude' };
+  document.getElementById(idMap[mode])?.classList.add('active');
+  updateModelLabel();
+}
+
+function setGptModel(val) {
+  gptModel = val;
+  updateModelLabel();
+}
+
+function setClaudeModel(val) {
+  claudeModel = val;
+  updateModelLabel();
+}
+
+function updateModelLabel() {
+  const modeLabel = { hybrid:'🔀 ハイブリッド', gpt:'🟢 ChatGPT のみ', claude:'🟣 Claude のみ' };
+  const gptName = gptModel;
+  const cldName = claudeModel.replace('-20250514','').replace('-20251001','');
+  document.getElementById('currentModelLabel').textContent =
+    `${modeLabel[aiMode]}｜GPT: ${gptName}｜Claude: ${cldName}`;
 }
 
 function previewVoice() {
