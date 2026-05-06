@@ -72,7 +72,7 @@ video{width:100%;height:100%;object-fit:cover;display:none;}
   <header>
     <div class="logo">てのひら 🤲</div>
     <div style="display:flex;align-items:center;gap:8px;">
-      <span class="badge">v20260506-CMD</span>
+      <span class="badge">v20260506-PHONE</span>
       <div class="status" id="dot"></div>
     </div>
   </header>
@@ -218,6 +218,146 @@ window.addEventListener('load', () => {
   }, 500);
 });
 
+
+// ===== スマホアプリ起動 =====
+function launchApp(type, params) {
+  const schemes = {
+    call:    (p) => `tel:${p.number}`,
+    sms:     (p) => `sms:${p.number}${p.body ? '?body='+encodeURIComponent(p.body) : ''}`,
+    map:     (p) => `https://maps.google.com/?q=${p.query || (lat+','+lon)}&near=${lat},${lon}`,
+    email:   (p) => `mailto:${p.to||''}?subject=${encodeURIComponent(p.subject||'')}`,
+    browser: (p) => p.url,
+  };
+  const url = schemes[type]?.(params);
+  if (url) window.location.href = url;
+}
+
+// 状況判断エンジン
+function analyzeIntent(q) {
+  const intents = [
+    // 電話・通話
+    { pattern: /電話.*119|119.*電話|救急車|救急/, action: 'call_119' },
+    { pattern: /電話.*110|110.*電話|警察/, action: 'call_110' },
+    { pattern: /電話.*117|時報/, action: 'call_117' },
+    { pattern: /電話し|電話かけ|発信|電話をかけ/, action: 'call_prompt' },
+    // マップ・施設検索
+    { pattern: /近く.*病院|病院.*探|救急.*病院/, action: 'map_hospital' },
+    { pattern: /近く.*トイレ|トイレ.*探|公衆トイレ/, action: 'map_toilet' },
+    { pattern: /近く.*薬局|薬局.*探|ドラッグ/, action: 'map_pharmacy' },
+    { pattern: /近く.*コンビニ|コンビニ.*探/, action: 'map_convenience' },
+    { pattern: /近く.*駐車|駐車場.*探/, action: 'map_parking' },
+    { pattern: /近く.*駅|駅.*探/, action: 'map_station' },
+    { pattern: /道.*教|ルート|行き方|案内し/, action: 'map_navigate' },
+    // カメラ
+    { pattern: /周り.*見て|周囲.*確認|カメラ.*起動|撮影/, action: 'camera' },
+    { pattern: /間取り|部屋.*解析|室内.*確認/, action: 'camera_indoor' },
+    { pattern: /段差|障害物|危険.*確認/, action: 'camera_obstacle' },
+    // SMS
+    { pattern: /メッセージ.*送|SMS.*送|連絡.*送/, action: 'sms_prompt' },
+    // 緊急
+    { pattern: /助けて|緊急|倒れ|動けない|具合.*悪/, action: 'emergency' },
+  ];
+  for (const i of intents) {
+    if (i.pattern.test(q)) return i.action;
+  }
+  return null;
+}
+
+async function executeIntent(action, q) {
+  switch(action) {
+    case 'call_119':
+      await aiSay('救急車を呼びます。119番に発信します。現在地は' + (addr||'不明') + 'です。');
+      launchApp('call', {number:'119'}); return true;
+
+    case 'call_110':
+      await aiSay('警察に連絡します。110番に発信します。');
+      launchApp('call', {number:'110'}); return true;
+
+    case 'call_117':
+      await aiSay('時報に接続します。');
+      launchApp('call', {number:'117'}); return true;
+
+    case 'call_prompt':
+      await aiSay('電話番号を教えてください。「090-XXXX-XXXXに電話して」と話しかけてください。');
+      return true;
+
+    case 'map_hospital':
+      await aiSay('近くの病院をGoogleマップで検索します。');
+      launchApp('map', {query:'病院 緊急'}); return true;
+
+    case 'map_toilet':
+      await aiSay('近くのトイレをGoogleマップで検索します。');
+      launchApp('map', {query:'公共トイレ バリアフリー'}); return true;
+
+    case 'map_pharmacy':
+      await aiSay('近くの薬局をGoogleマップで検索します。');
+      launchApp('map', {query:'薬局 ドラッグストア'}); return true;
+
+    case 'map_convenience':
+      await aiSay('近くのコンビニをGoogleマップで検索します。');
+      launchApp('map', {query:'コンビニエンスストア'}); return true;
+
+    case 'map_parking':
+      await aiSay('近くの駐車場をGoogleマップで検索します。');
+      launchApp('map', {query:'駐車場 障害者スペース'}); return true;
+
+    case 'map_station':
+      await aiSay('近くの駅をGoogleマップで検索します。');
+      launchApp('map', {query:'駅 バリアフリー'}); return true;
+
+    case 'map_navigate':
+      await aiSay('現在地からのルートをGoogleマップで案内します。');
+      launchApp('map', {query:q}); return true;
+
+    case 'camera':
+      setTab(document.querySelector('.nb:nth-child(2)'), 'cam');
+      await startCam();
+      await aiSay('カメラを起動しました。周囲を解析します。');
+      setTimeout(() => analyzeRoom('general'), 1500); return true;
+
+    case 'camera_indoor':
+      setTab(document.querySelector('.nb:nth-child(2)'), 'cam');
+      await startCam();
+      await aiSay('室内を解析します。');
+      setTimeout(() => analyzeRoom('indoor'), 1500); return true;
+
+    case 'camera_obstacle':
+      setTab(document.querySelector('.nb:nth-child(2)'), 'cam');
+      await startCam();
+      await aiSay('障害物・段差を確認します。');
+      setTimeout(() => analyzeRoom('obstacle'), 1500); return true;
+
+    case 'sms_prompt':
+      await aiSay('メッセージの送信先と内容を教えてください。');
+      return true;
+
+    case 'emergency':
+      await aiSay('緊急事態ですね。救急（119番）と警察（110番）どちらに連絡しますか？');
+      return true;
+
+    default: return false;
+  }
+}
+
+// 電話番号パターンを検出して発信
+function detectAndCall(q) {
+  const numMatch = q.match(/([0-9０-９]{2,4}[-−ー]?[0-9０-９]{3,4}[-−ー]?[0-9０-９]{4})/);
+  if (numMatch) {
+    const num = numMatch[1].replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0)-0xFEE0)).replace(/[-−ー]/g,'');
+    aiSay(num + 'に電話します。').then(() => launchApp('call', {number:num}));
+    return true;
+  }
+  return false;
+}
+
+function aiSay(text) {
+  return new Promise(resolve => {
+    addBubble('ai', text);
+    speak(text);
+    setTimeout(resolve, Math.max(1500, text.length * 80));
+  });
+}
+
 // ===== GPS =====
 function getGPS() {
   document.getElementById('locText').textContent = '📡 取得中...';
@@ -270,6 +410,16 @@ async function sendMsg(text) {
   setOrbState('speaking');
 
   // ===== 音声コマンド→アプリ操作 =====
+
+  // 電話番号直接指定
+  if (detectAndCall(q)) { setOrbState('idle'); schedNext(); return; }
+
+  // 意図判定→スマホアプリ起動
+  const intent = analyzeIntent(q);
+  if (intent) {
+    const handled = await executeIntent(intent, q);
+    if (handled) { setOrbState('idle'); schedNext(); return; }
+  }
 
   // ホーム画面
   if (/ホーム|最初|トップ|メイン画面/.test(q)) {
