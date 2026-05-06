@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>てのひら — 生活支援アシスタント</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&family=DM+Serif+Display&display=swap');
+  :root {
+    --bg:#0a0f1e;--surface:#111827;--card:#1a2540;
+    --accent:#38bdf8;--accent2:#818cf8;--green:#34d399;
+    --red:#f87171;--yellow:#fbbf24;--text:#e2e8f0;
+    --muted:#64748b;--border:rgba(56,189,248,0.15);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
+  body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+    background:radial-gradient(ellipse 80% 50% at 20% 10%,rgba(56,189,248,0.08) 0%,transparent 60%),
+               radial-gradient(ellipse 60% 40% at 80% 90%,rgba(129,140,248,0.07) 0%,transparent 60%);}
+
+  .app{position:relative;z-index:1;max-width:480px;margin:0 auto;padding:0 0 110px;}
+
+  /* ヘッダー */
+  header{padding:14px 20px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);}
+  .logo{font-family:'DM Serif Display',serif;font-size:1.45rem;color:var(--accent);}
+  .logo span{color:var(--text);font-size:0.76rem;font-family:'Noto Sans JP',sans-serif;display:block;font-weight:300;}
+  .header-right{display:flex;align-items:center;gap:8px;}
+  .mock-badge{padding:3px 8px;background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.3);border-radius:12px;font-size:0.65rem;color:var(--yellow);}
+  .status-dot{width:9px;height:9px;border-radius:50%;background:var(--muted);box-shadow:0 0 0 3px rgba(100,116,139,0.2);transition:all 0.3s;}
+  .status-dot.active{background:var(--green);box-shadow:0 0 0 4px rgba(52,211,153,0.25);animation:pulse 2s infinite;}
+  .status-dot.listen{background:var(--accent);box-shadow:0 0 0 8px rgba(56,189,248,0.2);animation:pulse 1s infinite;}
+  @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
+
+  /* タブ */
+  .tab-view{display:none;}.tab-view.active{display:block;}
+
+  /* カード */
+  .card{margin:12px 20px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px;position:relative;overflow:hidden;}
+  .card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent),var(--accent2));}
+  .label{font-size:0.66rem;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px;}
+
+  /* 位置情報 */
+  .location-text{font-size:0.95rem;line-height:1.5;min-height:1.4em;}
+  .location-coords{font-size:0.68rem;color:var(--muted);margin-top:4px;font-family:monospace;}
+  .row{display:flex;gap:6px;margin-top:10px;}
+  .btn-sm{flex:1;padding:7px 8px;border-radius:8px;border:1px solid var(--border);background:rgba(56,189,248,0.08);color:var(--accent);font-size:0.72rem;font-family:inherit;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:3px;}
+  .btn-sm:hover{background:rgba(56,189,248,0.18);}
+  .btn-sm:active{transform:scale(0.96);}
+  .btn-sm.danger{color:var(--red);border-color:rgba(248,113,113,0.3);background:rgba(248,113,113,0.08);}
+
+  /* マップ（モック） */
+  .map-wrap{margin:0 20px 12px;border-radius:16px;overflow:hidden;border:1px solid var(--border);height:240px;background:var(--surface);position:relative;}
+  .mock-map{width:100%;height:100%;position:relative;overflow:hidden;}
+  .mock-map svg{width:100%;height:100%;}
+  .map-controls{position:absolute;top:8px;right:8px;display:flex;flex-direction:column;gap:4px;}
+  .map-ctrl-btn{width:28px;height:28px;background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9rem;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .map-zoom{font-size:0.65rem;color:var(--muted);text-align:center;padding:2px 0;}
+  .my-pos{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;}
+  .pos-dot{width:14px;height:14px;background:var(--accent);border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 8px rgba(56,189,248,0.2);animation:posAnim 2s ease-in-out infinite;}
+  @keyframes posAnim{0%,100%{box-shadow:0 0 0 4px rgba(56,189,248,0.25)}50%{box-shadow:0 0 0 12px rgba(56,189,248,0.1)}}
+
+  /* ルートパネル */
+  .route-panel{display:none;}
+  .route-panel.active{display:block;}
+  .route-step{display:flex;gap:8px;align-items:flex-start;padding:8px 10px;background:var(--surface);border-radius:8px;font-size:0.78rem;margin-bottom:5px;}
+  .route-step-dist{font-size:0.68rem;color:var(--accent);margin-top:2px;}
+
+  /* 施設検索 */
+  .search-bar{margin:0 20px 8px;display:flex;gap:6px;}
+  .search-input{flex:1;padding:9px 12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:0.82rem;font-family:inherit;}
+  .search-input:focus{outline:none;border-color:var(--accent);}
+  .search-btn{padding:9px 14px;background:var(--accent);color:#000;border:none;border-radius:10px;font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer;}
+  .cat-chips{display:flex;gap:5px;margin:0 20px 10px;overflow-x:auto;padding-bottom:2px;}
+  .cat-chip{padding:5px 11px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:0.72rem;white-space:nowrap;cursor:pointer;transition:all 0.2s;font-family:inherit;}
+  .cat-chip.active{border-color:var(--accent);color:var(--accent);background:rgba(56,189,248,0.1);}
+  .places-list{margin:0 20px;display:flex;flex-direction:column;gap:7px;}
+  .place-item{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:11px 13px;display:flex;align-items:flex-start;gap:10px;cursor:pointer;transition:all 0.2s;}
+  .place-item:hover{border-color:rgba(56,189,248,0.4);transform:translateX(2px);}
+  .pi{font-size:1.5rem;flex-shrink:0;}
+  .pc{flex:1;min-width:0;}
+  .pn{font-size:0.85rem;font-weight:700;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .pa{font-size:0.72rem;color:var(--muted);}
+  .pm{display:flex;gap:6px;margin-top:3px;align-items:center;flex-wrap:wrap;}
+  .pd{font-size:0.7rem;color:var(--accent);}
+  .pr{font-size:0.7rem;color:var(--yellow);}
+  .po{font-size:0.68rem;padding:1px 5px;border-radius:3px;}
+  .po.op{background:rgba(52,211,153,0.15);color:var(--green);}
+  .po.cl{background:rgba(248,113,113,0.15);color:var(--red);}
+  .pact{display:flex;flex-direction:column;gap:3px;}
+  .nav-btn2{padding:4px 8px;background:rgba(56,189,248,0.1);border:1px solid var(--border);border-radius:6px;color:var(--accent);font-size:0.7rem;cursor:pointer;font-family:inherit;white-space:nowrap;}
+  .empty{text-align:center;padding:20px;color:var(--muted);font-size:0.82rem;}
+
+  /* カメラ */
+  .cam-wrap{margin:0 20px 10px;border-radius:16px;overflow:hidden;border:1px solid var(--border);aspect-ratio:4/3;background:#000;display:flex;align-items:center;justify-content:center;position:relative;}
+  #camVideo{width:100%;height:100%;object-fit:cover;display:none;}
+  .cam-ph{display:flex;flex-direction:column;align-items:center;gap:7px;color:var(--muted);font-size:0.8rem;}
+  .sf{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:65%;aspect-ratio:1;border:2px solid rgba(56,189,248,0.5);border-radius:12px;display:none;pointer-events:none;}
+  .sf.on{display:block;}
+  .sf::before,.sf::after{content:'';position:absolute;width:18px;height:18px;border-color:var(--accent);border-style:solid;}
+  .sf::before{top:-2px;left:-2px;border-width:2px 0 0 2px;border-radius:4px 0 0 0;}
+  .sf::after{bottom:-2px;right:-2px;border-width:0 2px 2px 0;border-radius:0 0 4px 0;}
+  .sl{position:absolute;width:100%;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);animation:sm 2s ease-in-out infinite;display:none;}
+  .sl.on{display:block;}
+  @keyframes sm{0%{top:0}100%{top:100%}}
+  .cam-btns{margin:0 20px 10px;display:flex;gap:6px;}
+  .at{font-size:0.86rem;line-height:1.7;}
+  .at.loading{color:var(--muted);animation:blink 1s infinite;}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:0.4}}
+
+  /* 音声 */
+  .voice-section{margin:0 20px 12px;display:flex;flex-direction:column;align-items:center;gap:9px;}
+  .vbtn{width:74px;height:74px;border-radius:50%;border:2px solid var(--accent);background:rgba(56,189,248,0.1);color:var(--accent);font-size:1.8rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;}
+  .vbtn.on{background:rgba(56,189,248,0.2);animation:vp 1s ease-in-out infinite;}
+  @keyframes vp{0%,100%{box-shadow:0 0 0 8px rgba(56,189,248,0.15),0 0 0 20px rgba(56,189,248,0.05)}50%{box-shadow:0 0 0 16px rgba(56,189,248,0.2),0 0 0 32px rgba(56,189,248,0.05)}}
+  .vs{font-size:0.8rem;color:var(--muted);}
+  .vt{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:9px 13px;font-size:0.8rem;min-height:40px;color:var(--text);line-height:1.5;}
+
+  /* コマンドチップ */
+  .cmd-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
+  .cmd-chip{padding:6px 9px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:0.74rem;color:var(--text);cursor:pointer;transition:all 0.2s;display:flex;align-items:center;gap:4px;font-family:inherit;}
+  .cmd-chip:hover{border-color:var(--accent);color:var(--accent);background:rgba(56,189,248,0.05);}
+
+  /* ナビ */
+  .nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:rgba(10,15,30,0.95);backdrop-filter:blur(20px);border-top:1px solid var(--border);display:flex;z-index:100;}
+  .nb{flex:1;padding:9px 6px;background:none;border:none;color:var(--muted);font-size:0.6rem;font-family:inherit;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;transition:color 0.2s;}
+  .nb.active{color:var(--accent);}
+  .ni{font-size:1.15rem;}
+
+  /* トースト */
+  .toast{position:fixed;top:14px;left:50%;transform:translateX(-50%) translateY(-80px);background:var(--card);border:1px solid var(--border);border-radius:20px;padding:8px 16px;font-size:0.8rem;transition:transform 0.4s cubic-bezier(0.34,1.56,0.64,1);z-index:9998;white-space:nowrap;}
+  .toast.show{transform:translateX(-50%) translateY(0);}
+
+  canvas{display:none;}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo">てのひら <span>生活支援アシスタント</span></div>
+    <div class="header-right">
+      <span class="mock-badge">MOCK MODE</span>
+      <div class="status-dot" id="dot"></div>
+    </div>
+  </header>
+
+  <!-- ホーム -->
+  <div class="tab-view active" id="tab-home">
+    <div class="card">
+      <div class="label">📍 現在地（モック）</div>
+      <div class="location-text" id="locationText">東京都新宿区西新宿2丁目 新宿駅西口付近</div>
+      <div class="location-coords" id="locationCoords">35.68950, 139.69171 (精度 ±8m)</div>
+      <div class="row">
+        <button class="btn-sm" onclick="mockGetLocation()">🔄 更新</button>
+        <button class="btn-sm" onclick="mockShare()">📤 共有</button>
+        <button class="btn-sm danger" onclick="mockEmergency()">🆘 緊急</button>
+      </div>
+    </div>
+
+    <div class="voice-section">
+      <button class="vbtn" id="vbtn" onclick="toggleVoice()">🎤</button>
+      <div class="vs" id="vs">マイクをタップして音声入力</div>
+      <div class="vt" id="vt">認識したコマンドがここに表示されます</div>
+    </div>
+
+    <div class="card" style="padding-top:12px">
+      <div class="label" style="margin-bottom:8px">💬 音声コマンド例（タップでも動作）</div>
+      <div class="cmd-grid">
+        <button class="cmd-chip" onclick="runCmd('周囲を確認して')">👁️ 周囲を確認して</button>
+        <button class="cmd-chip" onclick="runCmd('現在地を教えて')">📍 現在地を教えて</button>
+        <button class="cmd-chip" onclick="runCmd('近くのトイレを探して')">🚻 トイレを探して</button>
+        <button class="cmd-chip" onclick="runCmd('近くの病院を探して')">🏥 病院を探して</button>
+        <button class="cmd-chip" onclick="runCmd('近くのコンビニを探して')">🏪 コンビニを探して</button>
+        <button class="cmd-chip" onclick="runCmd('助けを呼んで')">🆘 助けを呼んで</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- カメラ -->
+  <div class="tab-view" id="tab-camera">
+    <div class="cam-wrap" id="camWrap">
+      <video id="camVideo" autoplay playsinline></video>
+      <div class="cam-ph" id="camPh"><div style="font-size:2.8rem">📷</div><div>タップしてカメラを起動</div></div>
+      <div class="sf" id="sf"><div class="sl" id="sl"></div></div>
+    </div>
+    <canvas id="canvas"></canvas>
+    <div class="cam-btns">
+      <button class="btn-sm" style="flex:2" onclick="analyzeCamera()">🔍 AI解析（モック）</button>
+      <button class="btn-sm" onclick="stopCam()">⏹ 停止</button>
+    </div>
+    <div class="card">
+      <div class="label">🤖 AI解析結果</div>
+      <div class="at" id="at" style="color:var(--muted)">カメラを起動すると周囲を解析します（モック動作）</div>
+    </div>
+  </div>
+
+  <!-- マップ -->
+  <div class="tab-view" id="tab-map">
+    <!-- モックマップ -->
+    <div class="map-wrap">
+      <div class="mock-map" id="mockMap">
+        <svg viewBox="0 0 480 240" xmlns="http://www.w3.org/2000/svg">
+          <!-- 背景 -->
+          <rect width="480" height="240" fill="#1a2540"/>
+          <!-- 道路（縦） -->
+          <rect x="100" y="0" width="22" height="240" fill="#253653"/>
+          <rect x="111" y="0" width="2" height="240" fill="#2d4a6b" stroke-dasharray="12,8"/>
+          <rect x="220" y="0" width="30" height="240" fill="#253653"/>
+          <rect x="235" y="0" width="2" height="240" fill="#2d4a6b"/>
+          <rect x="360" y="0" width="20" height="240" fill="#253653"/>
+          <!-- 道路（横） -->
+          <rect x="0" y="90" width="480" height="24" fill="#253653"/>
+          <rect x="0" y="101" width="480" height="2" fill="#2d4a6b"/>
+          <rect x="0" y="180" width="480" height="18" fill="#253653"/>
+          <!-- 建物群 -->
+          <rect x="130" y="10" width="80" height="72" rx="3" fill="#283d6a" stroke="#334d80" stroke-width="1"/>
+          <rect x="135" y="15" width="30" height="20" rx="2" fill="#2d4a6b"/>
+          <rect x="170" y="15" width="35" height="35" rx="2" fill="#2d4a6b"/>
+          <rect x="250" y="10" width="100" height="72" rx="3" fill="#283d6a" stroke="#334d80" stroke-width="1"/>
+          <rect x="255" y="20" width="40" height="55" rx="2" fill="#253060"/>
+          <rect x="300" y="20" width="45" height="35" rx="2" fill="#253060"/>
+          <rect x="130" y="122" width="80" height="50" rx="3" fill="#283d6a" stroke="#334d80" stroke-width="1"/>
+          <rect x="250" y="122" width="100" height="50" rx="3" fill="#283d6a" stroke="#334d80" stroke-width="1"/>
+          <rect x="10" y="10" width="82" height="72" rx="3" fill="#283d6a" stroke="#334d80" stroke-width="1"/>
+          <rect x="10" y="122" width="82" height="50" rx="3" fill="#283d6a" stroke="#334d80" stroke-width="1"/>
+          <rect x="390" y="10" width="82" height="72" rx="3" fill="#283d6a" stroke="#334d80" stroke-width="1"/>
+          <rect x="390" y="122" width="82" height="50" rx="3" fill="#283d6a" stroke="#334d80" stroke-width="1"/>
+          <!-- ルート線（アニメ） -->
+          <polyline id="routeLine" points="" stroke="#38bdf8" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="8,4" opacity="0">
+            <animate attributeName="stroke-dashoffset" from="0" to="-24" dur="0.8s" repeatCount="indefinite"/>
+          </polyline>
+          <!-- 施設マーカー -->
+          <g id="markers"></g>
+          <!-- 現在地 -->
+          <circle cx="240" cy="114" r="8" fill="#38bdf8" stroke="#fff" stroke-width="2"/>
+          <circle cx="240" cy="114" r="15" fill="#38bdf8" fill-opacity="0.2">
+            <animate attributeName="r" values="10;20;10" dur="2s" repeatCount="indefinite"/>
+            <animate attributeName="fill-opacity" values="0.3;0;0.3" dur="2s" repeatCount="indefinite"/>
+          </circle>
+          <!-- 凡例 -->
+          <rect x="6" y="200" width="120" height="34" rx="4" fill="rgba(10,15,30,0.8)"/>
+          <circle cx="18" cy="210" r="5" fill="#38bdf8" stroke="#fff" stroke-width="1.5"/>
+          <text x="27" y="214" fill="#e2e8f0" font-size="8">現在地</text>
+          <circle cx="18" cy="226" r="5" fill="#34d399" stroke="#fff" stroke-width="1.5"/>
+          <text x="27" y="230" fill="#e2e8f0" font-size="8">周辺施設</text>
+        </svg>
+        <div class="my-pos"><div class="pos-dot"></div></div>
+        <div class="map-controls">
+          <button class="map-ctrl-btn" onclick="mockZoom(1)">＋</button>
+          <div class="map-zoom" id="zoomLevel">16</div>
+          <button class="map-ctrl-btn" onclick="mockZoom(-1)">－</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card route-panel" id="routePanel">
+      <div class="label">🚶 ルート案内（モック）</div>
+      <div id="routeSteps"></div>
+    </div>
+
+    <div class="search-bar">
+      <input class="search-input" id="searchInput" placeholder="施設名・場所を検索..." />
+      <button class="search-btn" onclick="mockSearch()">検索</button>
+    </div>
+    <div class="cat-chips">
+      <button class="cat-chip active" onclick="setCat(this,'hospital')">🏥 病院</button>
+      <button class="cat-chip" onclick="setCat(this,'toilet')">🚻 トイレ</button>
+      <button class="cat-chip" onclick="setCat(this,'pharmacy')">💊 薬局</button>
+      <button class="cat-chip" onclick="setCat(this,'convenience')">🏪 コンビニ</button>
+      <button class="cat-chip" onclick="setCat(this,'parking')">🅿️ 駐車場</button>
+      <button class="cat-chip" onclick="setCat(this,'station')">🚇 駅</button>
+    </div>
+    <div class="places-list" id="placesList"></div>
+  </div>
+</div>
+
+<nav class="nav">
+  <button class="nb active" onclick="setTab(this,'home')"><span class="ni">🏠</span>ホーム</button>
+  <button class="nb" onclick="setTab(this,'camera')"><span class="ni">📷</span>カメラ</button>
+  <button class="nb" onclick="setTab(this,'map')"><span class="ni">🗺️</span>マップ</button>
+</nav>
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== モックデータ =====
+const MOCK_LOCATION = { lat: 35.6895, lon: 139.6917, address: '東京都新宿区西新宿2丁目 新宿駅西口付近' };
+
+const MOCK_PLACES = {
+  hospital: [
+    { name: '新宿東口病院', address: '新宿区歌舞伎町1-2-3', dist: 0.3, rating: 4.1, open: true, icon: '🏥', mapX: 310, mapY: 60 },
+    { name: '都立新宿医療センター', address: '新宿区西新宿8-1-1', dist: 0.7, rating: 4.3, open: true, icon: '🏥', mapX: 150, mapY: 40 },
+    { name: '慶應義塾大学病院', address: '新宿区信濃町35', dist: 1.2, rating: 4.5, open: true, icon: '🏥', mapX: 380, mapY: 130 },
+    { name: '新宿クリニック', address: '新宿区新宿3-5-6', dist: 0.5, rating: 3.9, open: false, icon: '🏥', mapX: 160, mapY: 140 },
+  ],
+  toilet: [
+    { name: '新宿駅西口 多目的トイレ', address: '新宿駅西口コンコース内', dist: 0.1, rating: 3.8, open: true, icon: '🚻', mapX: 250, mapY: 90 },
+    { name: 'ルミネ1 バリアフリートイレ', address: '新宿区西新宿1-1-5', dist: 0.2, rating: 4.0, open: true, icon: '🚻', mapX: 290, mapY: 50 },
+    { name: '新宿中央公園 多目的トイレ', address: '新宿区西新宿2-11', dist: 0.5, rating: 3.6, open: true, icon: '🚻', mapX: 130, mapY: 50 },
+    { name: 'ヨドバシカメラ 多目的トイレ', address: '新宿区西新宿1-11-1', dist: 0.3, rating: 4.2, open: true, icon: '🚻', mapX: 340, mapY: 140 },
+  ],
+  pharmacy: [
+    { name: 'マツモトキヨシ 新宿西口店', address: '新宿区西新宿1-1-3', dist: 0.2, rating: 3.9, open: true, icon: '💊', mapX: 270, mapY: 55 },
+    { name: 'ウエルシア薬局 新宿店', address: '新宿区新宿3-14-1', dist: 0.6, rating: 4.0, open: true, icon: '💊', mapX: 350, mapY: 60 },
+    { name: 'ドラッグストアコスモス', address: '新宿区西新宿2-6-1', dist: 0.4, rating: 3.7, open: false, icon: '💊', mapX: 170, mapY: 130 },
+  ],
+  convenience: [
+    { name: 'セブンイレブン 新宿西口店', address: '新宿区西新宿1-1-1', dist: 0.1, rating: 4.1, open: true, icon: '🏪', mapX: 255, mapY: 70 },
+    { name: 'ローソン 新宿西新宿店', address: '新宿区西新宿2-4-1', dist: 0.3, rating: 3.8, open: true, icon: '🏪', mapX: 140, mapY: 80 },
+    { name: 'ファミリーマート 新宿3丁目', address: '新宿区新宿3-1-1', dist: 0.5, rating: 3.9, open: true, icon: '🏪', mapX: 360, mapY: 55 },
+    { name: 'ミニストップ 新宿南店', address: '新宿区新宿4-1-7', dist: 0.8, rating: 3.6, open: true, icon: '🏪', mapX: 390, mapY: 145 },
+  ],
+  parking: [
+    { name: '新宿西口地下駐車場', address: '新宿区西新宿1丁目', dist: 0.2, rating: 3.7, open: true, icon: '🅿️', mapX: 220, mapY: 60 },
+    { name: 'タイムズ新宿第3', address: '新宿区西新宿3-7-1', dist: 0.4, rating: 4.0, open: true, icon: '🅿️', mapX: 130, mapY: 145 },
+    { name: '新宿パークタワー駐車場', address: '新宿区西新宿3-7-1', dist: 0.7, rating: 4.1, open: true, icon: '🅿️', mapX: 80, mapY: 40 },
+  ],
+  station: [
+    { name: '新宿駅（JR・小田急・京王）', address: '新宿区新宿3-38-1', dist: 0.1, rating: 3.5, open: true, icon: '🚇', mapX: 240, mapY: 100 },
+    { name: '西新宿駅（丸ノ内線）', address: '新宿区西新宿1丁目', dist: 0.3, rating: 3.8, open: true, icon: '🚇', mapX: 280, mapY: 80 },
+    { name: '新宿西口駅（大江戸線）', address: '新宿区西新宿1丁目', dist: 0.2, rating: 3.9, open: true, icon: '🚇', mapX: 200, mapY: 105 },
+  ],
+};
+
+const MOCK_ANALYSIS = [
+  '屋外の歩道です。正面に横断歩道があります。段差は見当たりません。歩行者が多い時間帯です。安全に進めます。',
+  '屋内（駅コンコース）です。スムーズな床面で段差なし。左手に多目的トイレがあります。エレベーターは右奥です。',
+  '歩道を歩いています。前方10メートルに電柱があります。右に迂回することをお勧めします。',
+  '商業施設入口付近です。自動ドアがあります。段差（約2センチ）に注意してください。スロープは右側にあります。',
+  '公園内の舗装路です。広くて平坦です。ベンチが両側にあります。快適に移動できます。',
+];
+
+const MOCK_ROUTES = {
+  hospital: [
+    { icon:'🚶', text:'現在地 → 北に50m直進', dist:'50m' },
+    { icon:'↗️', text:'右折して大通りへ', dist:'30m' },
+    { icon:'🏥', text:'新宿東口病院に到着', dist:'目的地' },
+  ],
+  toilet: [
+    { icon:'🚶', text:'現在地から西口改札方向へ', dist:'30m' },
+    { icon:'🚻', text:'コンコース内 多目的トイレに到着', dist:'目的地' },
+  ],
+  default: [
+    { icon:'🚶', text:'現在地から北に進む', dist:'100m' },
+    { icon:'↙️', text:'左折して目的地方向へ', dist:'80m' },
+    { icon:'📍', text:'目的地に到着', dist:'目的地' },
+  ],
+};
+
+// ===== 状態 =====
+let isListening = false, recognition = null, camStream = null, curCat = 'hospital';
+let zoomLevel = 16;
+
+// ===== 起動 =====
+window.addEventListener('load', () => {
+  setDot('active');
+  speak('てのひらを起動しました。現在地は' + MOCK_LOCATION.address + 'です');
+  renderPlaces('hospital');
+  setupCam();
+  setupSR();
+});
+
+// ===== 位置情報（モック） =====
+function mockGetLocation() {
+  setDot('listen');
+  document.getElementById('locationText').textContent = '取得中...';
+  setTimeout(() => {
+    document.getElementById('locationText').textContent = MOCK_LOCATION.address;
+    document.getElementById('locationCoords').textContent = `${MOCK_LOCATION.lat}, ${MOCK_LOCATION.lon} (精度 ±8m)`;
+    setDot('active');
+    showToast('✅ 位置情報を更新しました');
+    speak('現在地を更新しました。' + MOCK_LOCATION.address + 'です');
+  }, 1200);
+}
+function mockShare() {
+  const url = `https://maps.google.com/?q=${MOCK_LOCATION.lat},${MOCK_LOCATION.lon}`;
+  navigator.clipboard?.writeText(url).then(() => showToast('📋 位置URLをコピーしました'))
+    .catch(() => showToast('📤 ' + url));
+}
+function mockEmergency() {
+  if (confirm('緊急通報しますか？\n現在地: ' + MOCK_LOCATION.address + '\n\n※ モックモードのため実際には発信しません')) {
+    speak('緊急通報します。現在地は' + MOCK_LOCATION.address + 'です');
+    showToast('🆘 緊急通報（モック）');
+  }
+}
+
+// ===== 施設検索（モック） =====
+function setCat(btn, cat) {
+  document.querySelectorAll('.cat-chip').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  curCat = cat;
+  renderPlaces(cat);
+  updateMapMarkers(cat);
+}
+function mockSearch() {
+  const q = document.getElementById('searchInput').value.trim();
+  if (!q) return;
+  showToast('🔍 「' + q + '」で検索中...(モック)');
+  setTimeout(() => { renderPlaces(curCat); showToast('✅ ' + (MOCK_PLACES[curCat]?.length||0) + '件見つかりました'); }, 800);
+}
+function renderPlaces(cat) {
+  const list = document.getElementById('placesList');
+  const places = MOCK_PLACES[cat] || [];
+  if (!places.length) { list.innerHTML = '<div class="empty">施設が見つかりません</div>'; return; }
+  list.innerHTML = '';
+  places.forEach((p, i) => {
+    const el = document.createElement('div');
+    el.className = 'place-item';
+    el.innerHTML = `
+      <div class="pi">${p.icon}</div>
+      <div class="pc">
+        <div class="pn">${p.name}</div>
+        <div class="pa">${p.address}</div>
+        <div class="pm">
+          <span class="pd">📍 ${p.dist < 1 ? Math.round(p.dist*1000)+'m' : p.dist.toFixed(1)+'km'}</span>
+          <span class="pr">⭐ ${p.rating}</span>
+          <span class="po ${p.open?'op':'cl'}">${p.open?'営業中':'休業中'}</span>
+        </div>
+      </div>
+      <div class="pact">
+        <button class="nav-btn2" onclick="showRoute('${cat}','${p.name}',${i},event)">🚶 案内</button>
+        <button class="nav-btn2" onclick="spkPlace('${p.name}',${p.dist})">🔊</button>
+      </div>`;
+    list.appendChild(el);
+  });
+}
+function spkPlace(name, dist) {
+  const d = dist < 1 ? Math.round(dist*1000)+'メートル' : dist.toFixed(1)+'キロメートル';
+  speak(`${name}まで約${d}です`);
+}
+
+// ===== モックルート案内 =====
+function showRoute(cat, name, idx, e) {
+  e.stopPropagation();
+  const steps = MOCK_ROUTES[cat] || MOCK_ROUTES.default;
+  const p = MOCK_PLACES[cat]?.[idx];
+  const dist = p ? (p.dist < 1 ? Math.round(p.dist*1000)+'m' : p.dist.toFixed(1)+'km') : '不明';
+  const time = p ? Math.round(p.dist * 15) + '分' : '不明';
+
+  const panel = document.getElementById('routePanel');
+  document.getElementById('routeSteps').innerHTML = `
+    <div class="route-step"><div>🏁</div><div><strong>${dist}</strong> 徒歩 <strong>${time}</strong></div></div>
+    ${steps.map(s=>`
+    <div class="route-step">
+      <div>${s.icon}</div>
+      <div><div>${s.text}</div><div class="route-step-dist">${s.dist}</div></div>
+    </div>`).join('')}`;
+  panel.classList.add('active');
+
+  // マップにルート線表示
+  const routeLine = document.getElementById('routeLine');
+  if (p) {
+    routeLine.setAttribute('points', `240,114 ${p.mapX},${p.mapY}`);
+    routeLine.setAttribute('opacity', '1');
+  }
+  setTab(document.querySelectorAll('.nb')[2], 'map');
+  speak(`${name}まで徒歩約${time}です。ルート案内を開始します。`);
+  showToast('🚶 ルート案内開始');
+}
+
+// ===== モックマップマーカー =====
+function updateMapMarkers(cat) {
+  const markers = document.getElementById('markers');
+  markers.innerHTML = '';
+  const places = MOCK_PLACES[cat] || [];
+  places.slice(0, 4).forEach(p => {
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.innerHTML = `
+      <circle cx="${p.mapX}" cy="${p.mapY}" r="6" fill="#34d399" stroke="#fff" stroke-width="1.5"/>
+      <text x="${p.mapX+8}" y="${p.mapY+4}" fill="#e2e8f0" font-size="7">${p.name.slice(0,6)}</text>`;
+    markers.appendChild(g);
+  });
+}
+
+function mockZoom(d) {
+  zoomLevel = Math.max(10, Math.min(20, zoomLevel + d));
+  document.getElementById('zoomLevel').textContent = zoomLevel;
+  showToast('ズームレベル: ' + zoomLevel);
+}
+
+// ===== カメラ =====
+function setupCam() { document.getElementById('camWrap').addEventListener('click', toggleCam); }
+async function toggleCam() {
+  if (camStream) return;
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({ video:{facingMode:'environment'} });
+    const v = document.getElementById('camVideo');
+    v.srcObject = camStream; v.style.display = 'block';
+    document.getElementById('camPh').style.display = 'none';
+    document.getElementById('sf').classList.add('on');
+    document.getElementById('sl').classList.add('on');
+    showToast('カメラ起動');
+    setTimeout(analyzeCamera, 2000);
+  } catch {
+    showToast('カメラ未対応 → モック解析を表示');
+    mockAnalyze();
+  }
+}
+function stopCam() {
+  if (camStream) { camStream.getTracks().forEach(t=>t.stop()); camStream=null; }
+  document.getElementById('camVideo').style.display = 'none';
+  document.getElementById('camPh').style.display = 'flex';
+  document.getElementById('sf').classList.remove('on');
+  document.getElementById('sl').classList.remove('on');
+}
+async function analyzeCamera() {
+  const el = document.getElementById('at');
+  el.textContent = '解析中...'; el.className = 'at loading';
+
+  if (camStream) {
+    // 実カメラがある場合はClaude APIで解析
+    const v = document.getElementById('camVideo');
+    const cv = document.getElementById('canvas');
+    cv.width = v.videoWidth||640; cv.height = v.videoHeight||480;
+    cv.getContext('2d').drawImage(v, 0, 0);
+    const b64 = cv.toDataURL('image/jpeg', 0.8).split(',')[1];
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514', max_tokens: 300,
+          messages: [{ role:'user', content: [
+            { type:'image', source:{type:'base64',media_type:'image/jpeg',data:b64} },
+            { type:'text', text:'視覚・身体障害者向け支援AIです。場所・環境・危険な障害物・移動アドバイスを100字以内でやさしく説明してください。' }
+          ]}]
+        })
+      });
+      const d = await res.json();
+      const r = d.content?.[0]?.text || '';
+      if (r) { el.textContent = r; el.className = 'at'; speak(r); return; }
+    } catch {}
+  }
+  // カメラなし or API失敗 → モック解析
+  mockAnalyze();
+}
+function mockAnalyze() {
+  const el = document.getElementById('at');
+  el.textContent = '解析中...'; el.className = 'at loading';
+  setTimeout(() => {
+    const result = MOCK_ANALYSIS[Math.floor(Math.random() * MOCK_ANALYSIS.length)];
+    el.textContent = result; el.className = 'at';
+    speak(result);
+  }, 1500);
+}
+
+// ===== 音声認識 =====
+function setupSR() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { document.getElementById('vs').textContent = '⚠ 音声認識非対応（ボタンで操作できます）'; return; }
+  recognition = new SR(); recognition.lang = 'ja-JP'; recognition.continuous = false; recognition.interimResults = true;
+  recognition.onresult = e => {
+    const t = Array.from(e.results).map(r => r[0].transcript).join('');
+    document.getElementById('vt').textContent = t;
+    if (e.results[0].isFinal) processCmd(t);
+  };
+  recognition.onend = () => { isListening = false; document.getElementById('vbtn').className = 'vbtn'; document.getElementById('vs').textContent = 'マイクをタップして音声入力'; };
+  recognition.onerror = () => { isListening = false; document.getElementById('vbtn').className = 'vbtn'; };
+}
+function toggleVoice() {
+  if (!recognition) { showToast('音声認識非対応'); return; }
+  if (isListening) { recognition.stop(); return; }
+  recognition.start(); isListening = true;
+  document.getElementById('vbtn').className = 'vbtn on';
+  document.getElementById('vs').textContent = '聞いています...';
+  setDot('listen');
+}
+function processCmd(text) {
+  setDot('active');
+  const nbs = document.querySelectorAll('.nb');
+  if (text.includes('周囲')||text.includes('確認')||text.includes('見て')) {
+    setTab(nbs[1],'camera'); if (!camStream) toggleCam(); else analyzeCamera();
+  } else if (text.includes('現在地')||text.includes('どこ')||text.includes('位置')) {
+    speak(MOCK_LOCATION.address); showToast('📍 現在地を読み上げます');
+  } else if (text.includes('トイレ')) {
+    setTab(nbs[2],'map'); setCat(document.querySelectorAll('.cat-chip')[1],'toilet');
+    speak('近くのバリアフリートイレを表示します');
+  } else if (text.includes('病院')||text.includes('救急')) {
+    setTab(nbs[2],'map'); setCat(document.querySelectorAll('.cat-chip')[0],'hospital');
+    speak('近くの病院を表示します');
+  } else if (text.includes('コンビニ')) {
+    setTab(nbs[2],'map'); setCat(document.querySelectorAll('.cat-chip')[3],'convenience');
+    speak('近くのコンビニを表示します');
+  } else if (text.includes('薬')) {
+    setTab(nbs[2],'map'); setCat(document.querySelectorAll('.cat-chip')[2],'pharmacy');
+    speak('近くの薬局を表示します');
+  } else if (text.includes('助け')||text.includes('緊急')||text.includes('SOS')) {
+    mockEmergency();
+  } else {
+    speak('ご要望を承りました。周辺の施設を確認してください');
+    showToast('💬 「' + text + '」を受け取りました');
+  }
+}
+function runCmd(cmd) { document.getElementById('vt').textContent = cmd; processCmd(cmd); }
+
+// ===== 音声合成 =====
+function speak(t) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(t); u.lang = 'ja-JP'; u.rate = 0.9; u.pitch = 1.0;
+  window.speechSynthesis.speak(u);
+}
+
+// ===== UI ヘルパー =====
+function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2500); }
+function setDot(s) { document.getElementById('dot').className = 'status-dot' + (s?' '+s:''); }
+function setTab(btn, tab) {
+  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-view').forEach(v=>v.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-'+tab).classList.add('active');
+  if (tab==='camera' && !camStream) toggleCam();
+  if (tab==='map') { updateMapMarkers(curCat); }
+}
+</script>
+</body>
+</html>
