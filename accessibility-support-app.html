@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<!-- version: mock-20260506-maps -->
+<!-- version: mock-20260506-gps2 -->
 <title>てのひら — 生活支援アシスタント</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&family=DM+Serif+Display&display=swap');
@@ -169,7 +169,7 @@
   <header>
     <div class="logo">てのひら <span>生活支援アシスタント</span></div>
     <div class="header-right">
-      <span class="mock-badge">MOCK 20260506-MAPS</span>
+      <span class="mock-badge">MOCK 20260506-GPS2</span>
       <div class="status-dot" id="dot"></div>
     </div>
   </header>
@@ -365,7 +365,7 @@ function detectPlaceType(text) {
 async function searchNearbyPlaces(text) {
   const placeType = detectPlaceType(text);
   if (!placeType) return null;
-  if (!CURRENT_LOCATION.isReal && !CURRENT_LOCATION.lat) return null;
+  if (!CURRENT_LOCATION.lat) return null;  // latがあれば検索実行
 
   return new Promise((resolve) => {
     if (!placesService) initPlacesService();
@@ -378,13 +378,13 @@ async function searchNearbyPlaces(text) {
 
     placesService.nearbySearch({
       location,
-      radius: 1000,
+      radius: 2000,
       type: placeType.type,
       keyword: placeType.keyword,
       language: 'ja',
     }, (results, status) => {
       if (status === google.maps.places.PlacesServiceStatus.OK && results.length > 0) {
-        const top3 = results.slice(0, 3).map(p => {
+        const top3 = results.slice(0, 5).map(p => {
           const lat2 = p.geometry.location.lat();
           const lon2 = p.geometry.location.lng();
           const dist = calcDist(
@@ -611,24 +611,38 @@ async function mockGetLocation() {
         `${lat.toFixed(5)}, ${lon.toFixed(5)} (精度 ±${acc}m)`;
       setDot('active');
 
-      // 逆ジオコーディング（Nominatim）
+      // 逆ジオコーディング（Google Geocoding API）
       try {
-        const r = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=ja`
+        const geocoder = new google.maps.Geocoder();
+        geocoder.geocode(
+          { location: { lat, lng: lon }, language: 'ja' },
+          (results, status) => {
+            let addr;
+            if (status === 'OK' && results[0]) {
+              addr = results[0].formatted_address
+                .replace('日本、', '')
+                .replace(/〒[0-9-]+ /, '');
+            } else {
+              addr = `緯度${lat.toFixed(4)} 経度${lon.toFixed(4)}`;
+            }
+            CURRENT_LOCATION.address = addr;
+            CURRENT_LOCATION.lat = lat;
+            CURRENT_LOCATION.lon = lon;
+            CURRENT_LOCATION.isReal = true;
+            document.getElementById('locationText').textContent = addr;
+            document.getElementById('locationCoords').textContent =
+              `${lat.toFixed(5)}, ${lon.toFixed(5)} (精度 ±${acc}m)`;
+            showToast('✅ GPS取得完了');
+            speak('現在地は' + addr + 'です');
+            // Places初期化を確実に実行
+            initPlacesService();
+          }
         );
-        const d = await r.json();
-        const a = d.address;
-        const parts = [a.city||a.town||a.village, a.suburb||a.neighbourhood, a.road].filter(Boolean);
-        const addr = parts.join(' ') || d.display_name.split(',')[0];
-        CURRENT_LOCATION.address = addr;
-        document.getElementById('locationText').textContent = addr;
-        showToast('✅ GPS取得完了');
-        speak('現在地は' + addr + 'です');
-      } catch {
+      } catch(e) {
         const addr = `緯度${lat.toFixed(4)} 経度${lon.toFixed(4)}`;
         CURRENT_LOCATION.address = addr;
         document.getElementById('locationText').textContent = addr;
-        showToast('✅ GPS取得完了（住所変換失敗）');
+        showToast('✅ GPS取得完了');
       }
     },
     (err) => {
@@ -999,7 +1013,10 @@ async function aiAsk(question) {
   chatHistory.push({ role: 'user', content: question });
 
   const loc = CURRENT_LOCATION.address || MOCK_LOCATION.address;
-  const systemPrompt = `あなたは障害者・高齢者向けの生活支援AIアシスタント「てのひら」です。ユーザーの現在地は「${loc}」付近です。やさしく、具体的に、簡潔に（150字以内）日本語で答えてください。緊急時は必ず119番・110番を案内してください。`;
+  const gpsInfo = CURRENT_LOCATION.isReal
+    ? `現在地(GPS実測値): ${loc} [緯度${CURRENT_LOCATION.lat?.toFixed(4)} 経度${CURRENT_LOCATION.lon?.toFixed(4)}]`
+    : `現在地(モック): ${loc}`;
+  const systemPrompt = `あなたは障害者・高齢者向けの生活支援AIアシスタント「てのひら」です。ユーザーの現在地は「${gpsInfo}」です。やさしく、具体的に、簡潔に（150字以内）日本語で答えてください。緊急時は必ず119番・110番を案内してください。`;
 
   // GPT & Claude に並行リクエスト
   const [gptResult, cldResult] = await Promise.allSettled([
