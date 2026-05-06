@@ -178,14 +178,14 @@
   .qa-chip:hover{background:rgba(129,140,248,0.2);}
 
 </style>
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAj3PSk-LUo9ySxDIgRpZ4VAu_v1O9hpyg&libraries=places&language=ja"></script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAj3PSk-LUo9ySxDIgRpZ4VAu_v1O9hpyg&libraries=places&language=ja&callback=onGoogleMapsLoaded" async defer></script>
 </head>
 <body>
 <div class="app">
   <header>
     <div class="logo">てのひら <span>生活支援アシスタント</span></div>
     <div class="header-right">
-      <span class="mock-badge">MOCK 20260506-STB</span>
+      <span class="mock-badge">MOCK 20260506-FIX3</span>
       <div class="status-dot" id="dot"></div>
     </div>
   </header>
@@ -476,12 +476,32 @@
 
 <script>
 
+
+// ===== Google Maps 安全ラッパー =====
+let googleMapsReady = false;
+let pendingGeocode = null;
+
+window.onGoogleMapsLoaded = function() {
+  googleMapsReady = true;
+  console.log('Google Maps SDK ready');
+  initPlacesService();
+  // 保留中のジオコードがあれば実行
+  if (pendingGeocode) {
+    pendingGeocode();
+    pendingGeocode = null;
+  }
+};
+
+function isGoogleReady() {
+  return googleMapsReady && window.google && window.google.maps;
+}
+
 // ===== Google Maps Places API リアル施設検索 =====
 const MAPS_KEY = "AIzaSyAj3PSk-LUo9ySxDIgRpZ4VAu_v1O9hpyg";
 let placesService = null;
 
 function initPlacesService() {
-  if (!window.google || !window.google.maps) return;
+  if (!isGoogleReady()) return;
   const dummy = document.createElement('div');
   placesService = new google.maps.places.PlacesService(dummy);
 }
@@ -504,6 +524,7 @@ async function searchNearbyPlaces(text) {
   if (!CURRENT_LOCATION.lat) return null;  // latがあれば検索実行
 
   return new Promise((resolve) => {
+    if (!isGoogleReady()) { resolve(null); return; }
     if (!placesService) initPlacesService();
     if (!placesService) { resolve(null); return; }
 
@@ -636,7 +657,7 @@ let zoomLevel = 16;
 
 // ===== 起動 =====
 window.addEventListener('load', () => {
-  setTimeout(initPlacesService, 1000);
+  // initPlacesServiceはonGoogleMapsLoadedコールバックで呼ばれる
   setTimeout(startDeviceMonitor, 3000); // 起動3秒後に監視開始
   setTimeout(loadVoiceList, 1500);
   setDot('active');
