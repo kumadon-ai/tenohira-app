@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<!-- version: mock-20260506-voice-f -->
+<!-- version: mock-20260506-setting -->
 <title>てのひら — 生活支援アシスタント</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&family=DM+Serif+Display&display=swap');
@@ -132,6 +132,22 @@
   .toast.show{transform:translateX(-50%) translateY(0);}
 
   canvas{display:none;}
+
+  /* ===== 設定タブ ===== */
+  .setting-section{margin:12px 20px;}
+  .setting-title{font-size:0.7rem;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;}
+  .setting-row{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:8px;}
+  .setting-label{font-size:0.88rem;}
+  .setting-sub{font-size:0.72rem;color:var(--muted);margin-top:2px;}
+  .setting-control{display:flex;align-items:center;gap:8px;}
+  .seg-btn{padding:5px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:0.76rem;font-family:inherit;cursor:pointer;transition:all 0.2s;}
+  .seg-btn.active{background:var(--accent);color:#000;border-color:var(--accent);font-weight:700;}
+  .slider-wrap{display:flex;align-items:center;gap:8px;width:160px;}
+  .slider-wrap input[type=range]{flex:1;accent-color:var(--accent);}
+  .slider-val{font-size:0.76rem;color:var(--accent);min-width:28px;text-align:right;}
+  .voice-preview-btn{width:100%;padding:10px;background:rgba(56,189,248,0.1);border:1px solid var(--border);border-radius:10px;color:var(--accent);font-family:inherit;font-size:0.84rem;cursor:pointer;margin-top:4px;}
+  .voice-select{width:100%;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:inherit;font-size:0.82rem;margin-top:6px;}
+
   /* ===== AIアシスタントタブ ===== */
   .ai-hero{margin:12px 20px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;text-align:center;position:relative;overflow:hidden;}
   .ai-hero::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent2),var(--accent));}
@@ -169,7 +185,7 @@
   <header>
     <div class="logo">てのひら <span>生活支援アシスタント</span></div>
     <div class="header-right">
-      <span class="mock-badge">MOCK 20260506-F</span>
+      <span class="mock-badge">MOCK 20260506-SET</span>
       <div class="status-dot" id="dot"></div>
     </div>
   </header>
@@ -330,11 +346,85 @@
     </div>
   </div>
 
+
+  <!-- 設定タブ -->
+  <div class="tab-view" id="tab-setting">
+    <div class="setting-section">
+      <div class="setting-title">🔊 音声アシスタント設定</div>
+
+      <!-- 性別 -->
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">声の性別</div>
+          <div class="setting-sub">利用可能な音声から選択</div>
+        </div>
+        <div class="setting-control">
+          <button class="seg-btn" id="btnMale" onclick="setVoiceGender('male')">男性</button>
+          <button class="seg-btn active" id="btnFemale" onclick="setVoiceGender('female')">女性</button>
+        </div>
+      </div>
+
+      <!-- 速度 -->
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">話す速度</div>
+          <div class="setting-sub" id="rateLabel">0.9（標準）</div>
+        </div>
+        <div class="slider-wrap">
+          <input type="range" id="rateSlider" min="0.5" max="2.0" step="0.1" value="0.9"
+            oninput="updateRate(this.value)">
+          <span class="slider-val" id="rateVal">0.9</span>
+        </div>
+      </div>
+
+      <!-- 音程 -->
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">声の高さ</div>
+          <div class="setting-sub" id="pitchLabel">1.4（女性）</div>
+        </div>
+        <div class="slider-wrap">
+          <input type="range" id="pitchSlider" min="0.5" max="2.0" step="0.1" value="1.4"
+            oninput="updatePitch(this.value)">
+          <span class="slider-val" id="pitchVal">1.4</span>
+        </div>
+      </div>
+
+      <!-- 音声選択 -->
+      <div class="setting-row" style="flex-direction:column;align-items:flex-start;">
+        <div class="setting-label">音声エンジン</div>
+        <div class="setting-sub">端末で利用可能な日本語音声</div>
+        <select class="voice-select" id="voiceSelect" onchange="setVoiceByName(this.value)">
+          <option value="">自動選択</option>
+        </select>
+      </div>
+
+      <!-- プレビュー -->
+      <button class="voice-preview-btn" onclick="previewVoice()">🔊 この設定で試し聴き</button>
+    </div>
+
+    <div class="setting-section">
+      <div class="setting-title">📡 デバイス状態</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">状態通知間隔</div>
+          <div class="setting-sub">カメラ・マイクの状態を音声で通知</div>
+        </div>
+        <div class="setting-control">
+          <button class="seg-btn active" id="btn5s" onclick="setMonitorInterval(5000,this)">5秒</button>
+          <button class="seg-btn" id="btn10s" onclick="setMonitorInterval(10000,this)">10秒</button>
+          <button class="seg-btn" id="btnOff" onclick="setMonitorInterval(0,this)">オフ</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
 <nav class="nav">
   <button class="nb active" onclick="setTab(this,'home')"><span class="ni">🏠</span>ホーム</button>
   <button class="nb" onclick="setTab(this,'camera')"><span class="ni">📷</span>カメラ</button>
   <button class="nb" onclick="setTab(this,'map')"><span class="ni">🗺️</span>マップ</button>
   <button class="nb" onclick="setTab(this,'ai')"><span class="ni">🤖</span>AI</button>
+  <button class="nb" onclick="setTab(this,'setting')"><span class="ni">⚙️</span>設定</button>
 </nav>
 <div class="toast" id="toast"></div>
 
@@ -502,6 +592,7 @@ let zoomLevel = 16;
 window.addEventListener('load', () => {
   setTimeout(initPlacesService, 1000);
   setTimeout(startDeviceMonitor, 3000); // 起動3秒後に監視開始
+  setTimeout(loadVoiceList, 1500);
   setDot('active');
   renderPlaces('hospital');
   setupCam();
@@ -891,31 +982,33 @@ function speak(t) {
   window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(t);
   u.lang = 'ja-JP';
-  u.rate = 0.9;
-  u.pitch = 1.4;  // 高め = 女性らしい声
+  u.rate = voiceRate || 0.9;
+  u.pitch = voicePitch || 1.4;
   u.volume = 1.0;
 
-  // 女性の声を優先して選択
   const voices = window.speechSynthesis.getVoices();
-  const femaleVoice = voices.find(v =>
-    v.lang.startsWith('ja') && (
-      v.name.includes('Female') ||
-      v.name.includes('女') ||
-      v.name.includes('Kyoko') ||
-      v.name.includes('O-ren') ||
-      v.name.includes('Otoya') === false && v.name.includes('ja')
-    )
-  ) || voices.find(v => v.lang.startsWith('ja'));
 
-  if (femaleVoice) u.voice = femaleVoice;
+  // 手動選択された音声を優先
+  if (selectedVoiceName) {
+    const selected = voices.find(v => v.name === selectedVoiceName);
+    if (selected) { u.voice = selected; }
+  } else if (voiceGender === 'female') {
+    const v = voices.find(v => v.lang.startsWith('ja') && (
+      v.name.includes('Kyoko') || v.name.includes('O-ren') ||
+      v.name.includes('Female') || v.name.includes('女')
+    )) || voices.find(v => v.lang.startsWith('ja'));
+    if (v) u.voice = v;
+  } else {
+    const v = voices.find(v => v.lang.startsWith('ja') && (
+      v.name.includes('Otoya') || v.name.includes('Male') || v.name.includes('男')
+    )) || voices.find(v => v.lang.startsWith('ja'));
+    if (v) u.voice = v;
+  }
+
   window.speechSynthesis.speak(u);
 }
 
-// 音声リスト読み込み後に再設定（ブラウザによって非同期）
-window.speechSynthesis.onvoiceschanged = () => {
-  const voices = window.speechSynthesis.getVoices();
-  console.log('利用可能な音声:', voices.filter(v=>v.lang.startsWith('ja')).map(v=>v.name));
-};
+window.speechSynthesis.onvoiceschanged = () => { loadVoiceList(); };
 
 // ===== UI ヘルパー =====
 function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2500); }
@@ -1149,6 +1242,76 @@ function replaceBubble(id, text) {
 
 // 起動時にAI音声認識セットアップ
 // setupAiVoice は startOnboarding 内で呼び出し済み
+
+// ===== 音声設定 =====
+let voiceGender = 'female';
+let voiceRate = 0.9;
+let voicePitch = 1.4;
+let selectedVoiceName = '';
+
+function loadVoiceList() {
+  const voices = window.speechSynthesis.getVoices().filter(v => v.lang.startsWith('ja'));
+  const sel = document.getElementById('voiceSelect');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">自動選択</option>';
+  voices.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v.name;
+    opt.textContent = v.name;
+    sel.appendChild(opt);
+  });
+}
+
+function setVoiceGender(gender) {
+  voiceGender = gender;
+  document.getElementById('btnMale').classList.toggle('active', gender === 'male');
+  document.getElementById('btnFemale').classList.toggle('active', gender === 'female');
+  // pitch自動調整
+  if (gender === 'female') {
+    voicePitch = 1.4;
+  } else {
+    voicePitch = 0.8;
+  }
+  document.getElementById('pitchSlider').value = voicePitch;
+  document.getElementById('pitchVal').textContent = voicePitch;
+  document.getElementById('pitchLabel').textContent = voicePitch + (gender === 'female' ? '（女性）' : '（男性）');
+  selectedVoiceName = '';
+  document.getElementById('voiceSelect').value = '';
+}
+
+function updateRate(val) {
+  voiceRate = parseFloat(val);
+  document.getElementById('rateVal').textContent = val;
+  const labels = { 0.5:'遅い', 0.8:'やや遅い', 0.9:'標準', 1.2:'やや速い', 1.5:'速い', 2.0:'とても速い' };
+  document.getElementById('rateLabel').textContent = val + '（' + (labels[val] || '標準') + '）';
+}
+
+function updatePitch(val) {
+  voicePitch = parseFloat(val);
+  document.getElementById('pitchVal').textContent = val;
+  const p = parseFloat(val);
+  document.getElementById('pitchLabel').textContent = val + (p >= 1.3 ? '（高め）' : p <= 0.9 ? '（低め）' : '（標準）');
+}
+
+function setVoiceByName(name) {
+  selectedVoiceName = name;
+}
+
+function setMonitorInterval(ms, btn) {
+  document.querySelectorAll('#btn5s,#btn10s,#btnOff').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  stopDeviceMonitor();
+  if (ms > 0) {
+    deviceMonitorInterval = setInterval(checkDeviceStates, ms);
+  }
+}
+
+function previewVoice() {
+  speak('こんにちは。てのひらの音声アシスタントです。この声でご案内します。');
+}
+
+// speak関数をsettingに基づいて更新
+
 
 // ===== カメラ・マイク状態監視（5秒間隔） =====
 let deviceMonitorInterval = null;
