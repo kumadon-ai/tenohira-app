@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<!-- version: mock-20260506-gpt -->
+<!-- version: mock-20260506-hybrid -->
 <title>てのひら — 生活支援アシスタント</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&family=DM+Serif+Display&display=swap');
@@ -168,7 +168,7 @@
   <header>
     <div class="logo">てのひら <span>生活支援アシスタント</span></div>
     <div class="header-right">
-      <span class="mock-badge">MOCK 20260506-gpt</span>
+      <span class="mock-badge">MOCK 20260506-hybrid</span>
       <div class="status-dot" id="dot"></div>
     </div>
   </header>
@@ -718,65 +718,114 @@ document.addEventListener('DOMContentLoaded', () => {
   if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') aiSendText(); });
 });
 
+// APIキー設定
+const OPENAI_KEY = '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';
+
+// 回答品質スコアリング（文字数・具体性・やさしさで評価）
+function scoreAnswer(text) {
+  if (!text) return 0;
+  let score = 0;
+  // 適切な長さ（30〜150字）
+  const len = text.length;
+  if (len >= 30 && len <= 150) score += 3;
+  else if (len < 30) score += 1;
+  else score += 2;
+  // 具体的な情報（数字・固有名詞）
+  if (/[0-9０-９]/.test(text)) score += 2;
+  if (/番|号|メートル|分|時間|円/.test(text)) score += 1;
+  // 緊急キーワードへの対応
+  if (/119|110|救急|警察/.test(text)) score += 2;
+  // やさしい言葉（です・ます調）
+  if (/です|ます|ください/.test(text)) score += 1;
+  return score;
+}
+
 async function aiAsk(question) {
   if (!question.trim()) return;
 
-  // ユーザーバブル追加
   addBubble('user', question);
   document.getElementById('aiTextInput').value = '';
 
-  // ローディング
-  const loadId = 'load_' + Date.now();
-  addBubble('ai loading', '考えています...', loadId);
+  // 2つのローディングバブル
+  const gptId  = 'gpt_'  + Date.now();
+  const cldId  = 'cld_'  + Date.now();
+  const bestId = 'best_' + Date.now();
 
-  // orb状態
   document.getElementById('aiOrb').classList.add('speaking');
-  document.getElementById('aiStatus').textContent = '回答を生成中...';
+  document.getElementById('aiStatus').textContent = 'ChatGPT & Claude に同時送信中...';
 
-  // 会話履歴に追加
   chatHistory.push({ role: 'user', content: question });
 
   const loc = MOCK_LOCATION.address;
-  const systemPrompt = `あなたは障害者・高齢者向けの生活支援AIアシスタント「てのひら」です。
-ユーザーの現在地は「${loc}」付近です。
-やさしく、具体的に、簡潔に（150字以内）日本語で答えてください。
-緊急時は必ず119番・110番を案内してください。`;
+  const systemPrompt = `あなたは障害者・高齢者向けの生活支援AIアシスタント「てのひら」です。ユーザーの現在地は「${loc}」付近です。やさしく、具体的に、簡潔に（150字以内）日本語で答えてください。緊急時は必ず119番・110番を案内してください。`;
 
-  try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+  // GPT & Claude に並行リクエスト
+  const [gptResult, cldResult] = await Promise.allSettled([
+    // ChatGPT
+    fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer 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' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + OPENAI_KEY },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        max_tokens: 400,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...chatHistory.slice(-10),
-        ],
+        model: 'gpt-4o-mini', max_tokens: 400,
+        messages: [{ role: 'system', content: systemPrompt }, ...chatHistory.slice(-10)],
       })
-    });
-    const data = await res.json();
-    const answer = data.choices?.[0]?.message?.content || '申し訳ありません、回答できませんでした。';
+    }).then(r => r.json()).then(d => d.choices?.[0]?.message?.content || ''),
 
-    // ローディングを回答に置換
-    replaceBubble(loadId, answer);
-    chatHistory.push({ role: 'assistant', content: answer });
+    // Claude
+    fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514', max_tokens: 400,
+        system: systemPrompt,
+        messages: chatHistory.slice(-10),
+      })
+    }).then(r => r.json()).then(d => d.content?.[0]?.text || ''),
+  ]);
 
-    // 音声読み上げ
-    speak(answer);
-    document.getElementById('aiOrb').classList.remove('speaking');
-    document.getElementById('aiStatus').textContent = '読み上げ中... タップで停止';
+  const gptText = gptResult.status === 'fulfilled' ? gptResult.value : '';
+  const cldText = cldResult.status === 'fulfilled' ? cldResult.value : '';
 
-    // 読み上げ完了後
-    window.speechSynthesis.addEventListener('end', () => {
-      document.getElementById('aiStatus').textContent = 'オーブをタップして話しかける';
-    }, { once: true });
+  // スコアで良い方を選択
+  const gptScore = scoreAnswer(gptText);
+  const cldScore = scoreAnswer(cldText);
+  const winner   = gptScore >= cldScore ? 'gpt' : 'claude';
+  const bestText = winner === 'gpt' ? gptText : cldText;
+  const winLabel = winner === 'gpt' ? '🟢 ChatGPT' : '🟣 Claude';
+  const loseLabel= winner === 'gpt' ? '🟣 Claude' : '🟢 ChatGPT';
+  const loseText = winner === 'gpt' ? cldText : gptText;
 
-  } catch(e) {
-    replaceBubble(loadId, '通信エラーが発生しました。ネットワークを確認してください。');
-    document.getElementById('aiOrb').classList.remove('speaking');
-    document.getElementById('aiStatus').textContent = 'オーブをタップして話しかける';
+  // 採用回答を表示
+  addBubble('ai', `${winLabel} が採用されました
+
+${bestText}`, bestId);
+
+  // 比較ボタン付きで両方の回答をサブ表示
+  if (gptText && cldText) {
+    const log = document.getElementById('chatLog');
+    const detail = document.createElement('div');
+    detail.style.cssText = 'margin:0 0 4px 0;font-size:0.7rem;color:var(--muted);cursor:pointer;text-align:center;';
+    detail.textContent = `▼ ${loseLabel}の回答を見る`;
+    detail.onclick = () => {
+      const sub = document.createElement('div');
+      sub.className = 'bubble ai';
+      sub.style.opacity = '0.65';
+      sub.textContent = loseText;
+      detail.replaceWith(sub);
+      log.scrollTop = log.scrollHeight;
+    };
+    log.appendChild(detail);
+    log.scrollTop = log.scrollHeight;
   }
+
+  chatHistory.push({ role: 'assistant', content: bestText });
+
+  speak(bestText);
+  document.getElementById('aiOrb').classList.remove('speaking');
+  document.getElementById('aiStatus').textContent = `${winLabel} を読み上げ中`;
+  window.speechSynthesis.addEventListener('end', () => {
+    document.getElementById('aiStatus').textContent = 'オーブをタップして話しかける';
+  }, { once: true });
 }
 
 function addBubble(cls, text, id) {
