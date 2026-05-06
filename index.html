@@ -109,7 +109,7 @@ video{width:100%;height:100%;object-fit:cover;display:none;}
   <header>
     <div class="logo">てのひら 🤲</div>
     <div style="display:flex;align-items:center;gap:8px;">
-      <span class="badge">v20260506-PHONEBOOK</span>
+      <span class="badge">v20260506-ECO</span>
       <div class="status" id="dot"></div>
     </div>
   </header>
@@ -230,30 +230,15 @@ let history = [];
 window.addEventListener('load', () => {
   setupRecog();
 
-  // 起動時にAIタブを表示
+  // AIタブを表示
   const aiBtn = document.querySelector('.nb:nth-child(3)');
   if (aiBtn) setTab(aiBtn, 'ai');
 
-  // GPS取得開始
-  getGPS();
+  // 起動メッセージ表示
+  addBubble('ai', '⚡ 起動中... GPS・マイク・カメラを準備しています');
 
-  // 起動メッセージ→音声読み上げ→マイク自動スタート
-  const welcome = 'お困りごとはありますか？';
-  addBubble('ai', welcome);
-
-  // 音声合成の準備を待ってから読み上げ＆マイク起動
-  setTimeout(() => {
-    speak(welcome);
-    // 読み上げ完了後にマイク自動スタート
-    const tryStart = () => {
-      if (!window.speechSynthesis.speaking) {
-        startMic();
-      } else {
-        setTimeout(tryStart, 300);
-      }
-    };
-    setTimeout(tryStart, 2500);
-  }, 500);
+  // 少し待ってから全機能オン
+  setTimeout(startAllFeatures, 800);
 });
 
 
@@ -588,6 +573,123 @@ function aiSay(text) {
   });
 }
 
+
+// ===== 電力管理 =====
+let gpsWatcher = null;
+let micTimer = null;
+let camTimer = null;
+const IDLE_MIC_SEC  = 30;  // 無音30秒でマイクオフ
+const IDLE_CAM_SEC  = 60;  // 未操作60秒でカメラオフ
+const GPS_INTERVAL  = 60000; // GPS更新間隔（1分）
+
+// 起動時に全機能を一括オン
+async function startAllFeatures() {
+  addBubble('ai', '⚡ 起動中... GPS・マイク・カメラを準備しています');
+
+  // GPS：watchPositionで継続取得（1分間隔）
+  startGPSWatch();
+
+  // マイク：自動スタート
+  await new Promise(r => setTimeout(r, 1000));
+  startMic();
+  resetMicTimer();
+
+  speak('お困りごとはありますか？');
+}
+
+// アプリ終了・バックグラウンド時に全機能オフ
+function stopAllFeatures() {
+  stopGPSWatch();
+  stopMic();
+  stopCam();
+  clearTimeout(micTimer);
+  clearTimeout(camTimer);
+  addBubble('ai', '💤 省電力モード: GPS・マイク・カメラを停止しました');
+}
+
+// GPS継続監視（バッテリー考慮で低精度モード）
+function startGPSWatch() {
+  if (gpsWatcher) return;
+  if (!navigator.geolocation) return;
+  gpsWatcher = navigator.geolocation.watchPosition(
+    async pos => {
+      lat = pos.coords.latitude;
+      lon = pos.coords.longitude;
+      const acc = Math.round(pos.coords.accuracy);
+      document.getElementById('locCoord').textContent =
+        `${lat.toFixed(5)}, ${lon.toFixed(5)} (±${acc}m)`;
+      document.getElementById('dot').className = 'status on';
+      // 住所は30秒に1回だけ更新
+      if (!gpsWatcher._lastAddr || Date.now() - gpsWatcher._lastAddr > 30000) {
+        gpsWatcher._lastAddr = Date.now();
+        try {
+          const r = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=ja`
+          );
+          const d = await r.json();
+          const a = d.address;
+          addr = [a.city||a.town||a.village, a.suburb||a.neighbourhood, a.road]
+            .filter(Boolean).join('') || d.display_name.split(',')[0];
+          document.getElementById('locText').textContent = addr;
+        } catch {}
+      }
+    },
+    err => {
+      document.getElementById('dot').className = 'status';
+      document.getElementById('locText').textContent = 'GPS取得エラー';
+    },
+    { enableHighAccuracy: false, timeout: 15000, maximumAge: GPS_INTERVAL }
+    // ※ enableHighAccuracy:false でバッテリー消耗を抑制
+  );
+}
+
+function stopGPSWatch() {
+  if (gpsWatcher) {
+    navigator.geolocation.clearWatch(gpsWatcher);
+    gpsWatcher = null;
+    document.getElementById('dot').className = 'status';
+  }
+}
+
+// マイク無音タイマー（30秒で自動オフ）
+function resetMicTimer() {
+  clearTimeout(micTimer);
+  micTimer = setTimeout(() => {
+    if (recogOn) {
+      stopMic();
+      addBubble('ai', '🎤 無音が続いたためマイクをオフにしました。オーブをタップで再開できます。');
+    }
+  }, IDLE_MIC_SEC * 1000);
+}
+
+// カメラ自動オフタイマー（60秒）
+function resetCamTimer() {
+  clearTimeout(camTimer);
+  camTimer = setTimeout(() => {
+    if (camStream) {
+      stopCam();
+      addBubble('ai', '📷 未使用のためカメラをオフにしました。');
+    }
+  }, IDLE_CAM_SEC * 1000);
+}
+
+// ページ表示/非表示でオン/オフ
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    // バックグラウンド→機能オフ
+    stopMic();
+    stopCam();
+    clearTimeout(micTimer);
+    clearTimeout(camTimer);
+  } else {
+    // フォアグラウンド復帰→マイク再開
+    setTimeout(() => {
+      startMic();
+      resetMicTimer();
+    }, 500);
+  }
+});
+
 // ===== GPS =====
 function getGPS() {
   document.getElementById('locText').textContent = '📡 取得中...';
@@ -775,6 +877,7 @@ function setupRecog() {
   recog.onresult = e => {
     const t = Array.from(e.results).map(r=>r[0].transcript).join('');
     document.getElementById('txtInput').value = t;
+    resetMicTimer(); // 音声検出でタイマーリセット
     if (e.results[0].isFinal) { stopMic(); sendMsg(t); }
   };
   recog.onend = () => stopMic();
@@ -830,7 +933,9 @@ function setOrbState(s) {
 }
 
 function schedNext(ms=2000) {
-  setTimeout(() => { if (!recogOn) startMic(); }, ms);
+  setTimeout(() => {
+    if (!recogOn) { startMic(); resetMicTimer(); }
+  }, ms);
 }
 
 
@@ -880,6 +985,7 @@ async function startCam() {
   document.getElementById('scan').classList.add('on');
   document.getElementById('resultText').textContent = 'カメラ起動完了。解析モードを選択してください。';
   speak('カメラを起動しました。解析モードを選択してください。');
+  resetCamTimer(); // カメラ自動オフタイマー開始
 }
 
 function showCamError(msg) {
