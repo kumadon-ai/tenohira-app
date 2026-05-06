@@ -72,7 +72,7 @@ video{width:100%;height:100%;object-fit:cover;display:none;}
   <header>
     <div class="logo">てのひら 🤲</div>
     <div style="display:flex;align-items:center;gap:8px;">
-      <span class="badge">v20260506-CAM</span>
+      <span class="badge">v20260506-CAM2</span>
       <div class="status" id="dot"></div>
     </div>
   </header>
@@ -109,6 +109,7 @@ video{width:100%;height:100%;object-fit:cover;display:none;}
       <div class="cam-ph" id="camPh">
         <div>📷</div>
         <div style="font-size:0.82rem">タップしてカメラを起動</div>
+        <div id="camErrMsg" style="font-size:0.72rem;color:var(--red);margin-top:6px;padding:0 10px;"></div>
       </div>
       <div class="sf" id="sf"><div class="scan" id="scan"></div></div>
     </div>
@@ -332,19 +333,55 @@ let camStream = null;
 
 async function startCam() {
   if (camStream) return;
-  try {
-    camStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width:{ideal:1280}, height:{ideal:720} }
-    });
-    const v = document.getElementById('camVideo');
-    v.srcObject = camStream;
-    v.style.display = 'block';
-    document.getElementById('camPh').style.display = 'none';
-    document.getElementById('sf').classList.add('on');
-    document.getElementById('scan').classList.add('on');
-  } catch(e) {
-    alert('カメラのアクセスを許可してください');
+
+  // まずカメラAPIが使えるか確認
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showCamError('このブラウザはカメラに対応していません。Chromeをお使いください。');
+    return;
   }
+
+  // HTTPSチェック
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+    showCamError('カメラはHTTPS環境でのみ動作します。');
+    return;
+  }
+
+  try {
+    // まず背面カメラで試行
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } }
+    });
+  } catch(e1) {
+    try {
+      // 失敗したら制約なしで試行
+      camStream = await navigator.mediaDevices.getUserMedia({ video: true });
+    } catch(e2) {
+      const msg = e2.name === 'NotAllowedError'
+        ? 'カメラの許可が必要です。\nアドレスバーの🔒をタップ→カメラ→許可 に変更してください。'
+        : e2.name === 'NotFoundError'
+        ? 'カメラが見つかりません。'
+        : 'カメラエラー: ' + e2.message;
+      showCamError(msg);
+      return;
+    }
+  }
+
+  const v = document.getElementById('camVideo');
+  v.srcObject = camStream;
+  v.style.display = 'block';
+  document.getElementById('camPh').style.display = 'none';
+  document.getElementById('sf').classList.add('on');
+  document.getElementById('scan').classList.add('on');
+  document.getElementById('resultText').textContent = 'カメラ起動完了。解析モードを選択してください。';
+  speak('カメラを起動しました。解析モードを選択してください。');
+}
+
+function showCamError(msg) {
+  const el = document.getElementById('resultText');
+  el.textContent = msg;
+  el.className = 'result-text done';
+  document.getElementById('camErrMsg').textContent = msg;
+  speak(msg);
 }
 
 async function toggleCam() {
