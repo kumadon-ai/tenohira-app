@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<!-- version: mock-20260506 -->
+<!-- version: mock-20260506-voice -->
 <title>てのひら — 生活支援アシスタント</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&family=DM+Serif+Display&display=swap');
@@ -132,6 +132,35 @@
   .toast.show{transform:translateX(-50%) translateY(0);}
 
   canvas{display:none;}
+  /* ===== AIアシスタントタブ ===== */
+  .ai-hero{margin:12px 20px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;text-align:center;position:relative;overflow:hidden;}
+  .ai-hero::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent2),var(--accent));}
+  .ai-orb{width:80px;height:80px;border-radius:50%;margin:0 auto 12px;background:radial-gradient(circle at 35% 35%,var(--accent2),#3730a3);display:flex;align-items:center;justify-content:center;font-size:2rem;position:relative;cursor:pointer;transition:all 0.3s;}
+  .ai-orb::after{content:'';position:absolute;inset:-4px;border-radius:50%;border:2px solid var(--accent2);opacity:0.4;}
+  .ai-orb.speaking{animation:orbPulse 1s ease-in-out infinite;box-shadow:0 0 30px rgba(129,140,248,0.5);}
+  .ai-orb.listening{animation:orbPulse 0.6s ease-in-out infinite;box-shadow:0 0 30px rgba(56,189,248,0.5);background:radial-gradient(circle at 35% 35%,var(--accent),#0369a1);}
+  @keyframes orbPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+  .ai-status{font-size:0.8rem;color:var(--muted);margin-bottom:4px;}
+  .ai-hint{font-size:0.72rem;color:var(--muted);opacity:0.6;}
+  .chat-log{margin:0 20px 12px;display:flex;flex-direction:column;gap:8px;max-height:340px;overflow-y:auto;}
+  .bubble{padding:10px 14px;border-radius:14px;font-size:0.84rem;line-height:1.6;max-width:88%;position:relative;animation:bubbleIn 0.3s ease;}
+  @keyframes bubbleIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+  .bubble.user{background:rgba(56,189,248,0.15);border:1px solid rgba(56,189,248,0.25);align-self:flex-end;border-bottom-right-radius:4px;}
+  .bubble.ai{background:rgba(129,140,248,0.12);border:1px solid rgba(129,140,248,0.2);align-self:flex-start;border-bottom-left-radius:4px;}
+  .bubble.ai::before{content:'🤖';font-size:0.7rem;display:block;margin-bottom:3px;opacity:0.6;}
+  .bubble.user::after{content:'🎤';font-size:0.7rem;display:block;text-align:right;margin-top:3px;opacity:0.6;}
+  .bubble.loading{color:var(--muted);animation:bubbleIn 0.3s ease,blink2 1s infinite;}
+  @keyframes blink2{0%,100%{opacity:1}50%{opacity:0.4}}
+  .voice-input-bar{margin:0 20px 10px;display:flex;gap:8px;}
+  .voice-text-input{flex:1;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:24px;color:var(--text);font-size:0.84rem;font-family:inherit;}
+  .voice-text-input:focus{outline:none;border-color:var(--accent2);}
+  .voice-send-btn{width:42px;height:42px;border-radius:50%;background:var(--accent2);border:none;color:#fff;font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .voice-mic-btn{width:42px;height:42px;border-radius:50%;background:rgba(56,189,248,0.15);border:1px solid var(--accent);color:var(--accent);font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .voice-mic-btn.on{background:var(--accent);color:#000;animation:orbPulse 0.8s infinite;}
+  .quick-asks{margin:0 20px 10px;display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;}
+  .qa-chip{padding:5px 12px;border-radius:20px;border:1px solid rgba(129,140,248,0.3);background:rgba(129,140,248,0.08);color:var(--accent2);font-size:0.72rem;white-space:nowrap;cursor:pointer;font-family:inherit;transition:all 0.2s;}
+  .qa-chip:hover{background:rgba(129,140,248,0.2);}
+
 </style>
 </head>
 <body>
@@ -139,7 +168,7 @@
   <header>
     <div class="logo">てのひら <span>生活支援アシスタント</span></div>
     <div class="header-right">
-      <span class="mock-badge">MOCK 20260506</span>
+      <span class="mock-badge">MOCK 20260506-v</span>
       <div class="status-dot" id="dot"></div>
     </div>
   </header>
@@ -274,10 +303,37 @@
   </div>
 </div>
 
+
+  <!-- AIアシスタントタブ -->
+  <div class="tab-view" id="tab-ai">
+    <div class="ai-hero">
+      <div class="ai-orb" id="aiOrb" onclick="toggleAiVoice()">🤖</div>
+      <div class="ai-status" id="aiStatus">オーブをタップして話しかける</div>
+      <div class="ai-hint">または下のマイクボタン・テキストで入力</div>
+    </div>
+
+    <div class="quick-asks">
+      <button class="qa-chip" onclick="aiAsk('今日の体調管理で気をつけることは？')">体調管理</button>
+      <button class="qa-chip" onclick="aiAsk('車椅子で新宿駅を利用するコツを教えて')">車椅子移動</button>
+      <button class="qa-chip" onclick="aiAsk('介護保険サービスについて教えて')">介護保険</button>
+      <button class="qa-chip" onclick="aiAsk('緊急時の連絡方法は？')">緊急時対応</button>
+      <button class="qa-chip" onclick="aiAsk('今日の天気に合わせた外出アドバイスは？')">外出アドバイス</button>
+    </div>
+
+    <div class="chat-log" id="chatLog"></div>
+
+    <div class="voice-input-bar">
+      <button class="voice-mic-btn" id="aiMicBtn" onclick="toggleAiVoice()">🎤</button>
+      <input class="voice-text-input" id="aiTextInput" placeholder="メッセージを入力..." />
+      <button class="voice-send-btn" onclick="aiSendText()">➤</button>
+    </div>
+  </div>
+
 <nav class="nav">
   <button class="nb active" onclick="setTab(this,'home')"><span class="ni">🏠</span>ホーム</button>
   <button class="nb" onclick="setTab(this,'camera')"><span class="ni">📷</span>カメラ</button>
   <button class="nb" onclick="setTab(this,'map')"><span class="ni">🗺️</span>マップ</button>
+  <button class="nb" onclick="setTab(this,'ai')"><span class="ni">🤖</span>AI</button>
 </nav>
 <div class="toast" id="toast"></div>
 
@@ -610,6 +666,137 @@ function setTab(btn, tab) {
   if (tab==='camera' && !camStream) toggleCam();
   if (tab==='map') { updateMapMarkers(curCat); }
 }
+
+// ===== AIアシスタント（音声会話） =====
+let aiListening = false, aiRecognition = null;
+const chatHistory = [];
+
+function setupAiVoice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return;
+  aiRecognition = new SR();
+  aiRecognition.lang = 'ja-JP';
+  aiRecognition.continuous = false;
+  aiRecognition.interimResults = true;
+  aiRecognition.onresult = e => {
+    const t = Array.from(e.results).map(r => r[0].transcript).join('');
+    document.getElementById('aiTextInput').value = t;
+    if (e.results[0].isFinal) { stopAiListen(); aiAsk(t); }
+  };
+  aiRecognition.onend = () => stopAiListen();
+  aiRecognition.onerror = () => stopAiListen();
+}
+
+function toggleAiVoice() {
+  if (aiListening) { stopAiListen(); return; }
+  if (!aiRecognition) { showToast('音声認識非対応 — テキストで入力してください'); return; }
+  aiRecognition.start();
+  aiListening = true;
+  document.getElementById('aiOrb').classList.add('listening');
+  document.getElementById('aiMicBtn').classList.add('on');
+  document.getElementById('aiStatus').textContent = '聞いています... 話しかけてください';
+}
+
+function stopAiListen() {
+  aiListening = false;
+  try { aiRecognition?.stop(); } catch {}
+  document.getElementById('aiOrb').classList.remove('listening');
+  document.getElementById('aiMicBtn').classList.remove('on');
+  document.getElementById('aiStatus').textContent = 'オーブをタップして話しかける';
+}
+
+function aiSendText() {
+  const input = document.getElementById('aiTextInput');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  aiAsk(text);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const inp = document.getElementById('aiTextInput');
+  if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') aiSendText(); });
+});
+
+async function aiAsk(question) {
+  if (!question.trim()) return;
+
+  // ユーザーバブル追加
+  addBubble('user', question);
+  document.getElementById('aiTextInput').value = '';
+
+  // ローディング
+  const loadId = 'load_' + Date.now();
+  addBubble('ai loading', '考えています...', loadId);
+
+  // orb状態
+  document.getElementById('aiOrb').classList.add('speaking');
+  document.getElementById('aiStatus').textContent = '回答を生成中...';
+
+  // 会話履歴に追加
+  chatHistory.push({ role: 'user', content: question });
+
+  const loc = MOCK_LOCATION.address;
+  const systemPrompt = `あなたは障害者・高齢者向けの生活支援AIアシスタント「てのひら」です。
+ユーザーの現在地は「${loc}」付近です。
+やさしく、具体的に、簡潔に（150字以内）日本語で答えてください。
+緊急時は必ず119番・110番を案内してください。`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 400,
+        system: systemPrompt,
+        messages: chatHistory.slice(-10), // 直近10件のみ送信
+      })
+    });
+    const data = await res.json();
+    const answer = data.content?.[0]?.text || '申し訳ありません、回答できませんでした。';
+
+    // ローディングを回答に置換
+    replaceBubble(loadId, answer);
+    chatHistory.push({ role: 'assistant', content: answer });
+
+    // 音声読み上げ
+    speak(answer);
+    document.getElementById('aiOrb').classList.remove('speaking');
+    document.getElementById('aiStatus').textContent = '読み上げ中... タップで停止';
+
+    // 読み上げ完了後
+    window.speechSynthesis.addEventListener('end', () => {
+      document.getElementById('aiStatus').textContent = 'オーブをタップして話しかける';
+    }, { once: true });
+
+  } catch(e) {
+    replaceBubble(loadId, '通信エラーが発生しました。ネットワークを確認してください。');
+    document.getElementById('aiOrb').classList.remove('speaking');
+    document.getElementById('aiStatus').textContent = 'オーブをタップして話しかける';
+  }
+}
+
+function addBubble(cls, text, id) {
+  const log = document.getElementById('chatLog');
+  const div = document.createElement('div');
+  div.className = 'bubble ' + cls;
+  div.textContent = text;
+  if (id) div.id = id;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+function replaceBubble(id, text) {
+  const el = document.getElementById(id);
+  if (el) { el.className = 'bubble ai'; el.textContent = text; }
+  const log = document.getElementById('chatLog');
+  log.scrollTop = log.scrollHeight;
+}
+
+
+// 起動時にAI音声認識セットアップ
+window.addEventListener('load', setupAiVoice);
 </script>
 </body>
 </html>
