@@ -45,6 +45,29 @@ header{padding:14px 20px;display:flex;align-items:center;justify-content:space-b
 .tab{display:none;}.tab.active{display:block;}
 .status{width:9px;height:9px;border-radius:50%;background:var(--muted);}
 .status.on{background:var(--green);animation:pulse 2s infinite;}
+.contacts-modal{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:999;display:none;align-items:flex-end;}
+.contacts-modal.open{display:flex;}
+.contacts-sheet{background:#111827;border-radius:20px 20px 0 0;width:100%;max-height:80vh;overflow-y:auto;padding:20px;}
+.contacts-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
+.contacts-title{font-size:1rem;font-weight:700;color:var(--accent);}
+.contacts-close{background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer;}
+.contact-item{display:flex;align-items:center;gap:12px;padding:12px;background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:8px;cursor:pointer;transition:all .2s;}
+.contact-item:hover{border-color:var(--accent);}
+.contact-avatar{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;}
+.contact-info{flex:1;}
+.contact-name{font-size:0.9rem;font-weight:700;}
+.contact-rel{font-size:0.72rem;color:var(--muted);margin-top:2px;}
+.contact-num{font-size:0.78rem;color:var(--accent);margin-top:2px;font-family:monospace;}
+.contact-actions{display:flex;gap:6px;}
+.c-btn{padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:rgba(56,189,248,0.1);color:var(--accent);font-size:0.72rem;cursor:pointer;font-family:inherit;}
+.c-btn.sms{color:var(--green);border-color:rgba(52,211,153,0.3);background:rgba(52,211,153,0.1);}
+.add-contact-btn{width:100%;padding:12px;border-radius:12px;border:2px dashed var(--border);background:none;color:var(--muted);font-size:0.85rem;font-family:inherit;cursor:pointer;margin-top:4px;}
+.add-form{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;display:none;}
+.add-form.open{display:block;}
+.form-input{width:100%;padding:9px 12px;background:#0a0f1e;border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.84rem;font-family:inherit;margin-bottom:8px;}
+.form-input:focus{outline:none;border-color:var(--accent);}
+.form-row{display:flex;gap:6px;}
+
 .cam-wrap{margin:0 20px 10px;border-radius:16px;overflow:hidden;border:1px solid var(--border);aspect-ratio:4/3;background:#000;display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer;}
 video{width:100%;height:100%;object-fit:cover;display:none;}
 .cam-ph{text-align:center;color:var(--muted);}
@@ -72,7 +95,7 @@ video{width:100%;height:100%;object-fit:cover;display:none;}
   <header>
     <div class="logo">てのひら 🤲</div>
     <div style="display:flex;align-items:center;gap:8px;">
-      <span class="badge">v20260506-PHONE</span>
+      <span class="badge">v20260506-CONTACTS</span>
       <div class="status" id="dot"></div>
     </div>
   </header>
@@ -97,6 +120,7 @@ video{width:100%;height:100%;object-fit:cover;display:none;}
         <button class="btn" onclick="goAI('近くのトイレを探して')">🚻 トイレを探して</button>
         <button class="btn" onclick="goAI('近くの病院を探して')">🏥 病院を探して</button>
         <button class="btn" onclick="goAI('助けを呼んで')">🆘 助けを呼んで</button>
+        <button class="btn" onclick="openContacts()" style="grid-column:span 2">📱 電話帳を開く</button>
       </div>
     </div>
   </div>
@@ -218,6 +242,134 @@ window.addEventListener('load', () => {
   }, 500);
 });
 
+
+
+// ===== 電話帳 =====
+let contacts = JSON.parse(localStorage.getItem('tenohira_contacts') || '[]');
+
+// デフォルト連絡先（初回のみ）
+if (contacts.length === 0) {
+  contacts = [
+    { id:1, name:'お母さん', rel:'母', number:'', emoji:'👩' },
+    { id:2, name:'お父さん', rel:'父', number:'', emoji:'👨' },
+    { id:3, name:'かかりつけ医', rel:'病院', number:'', emoji:'🏥' },
+  ];
+  saveContacts();
+}
+
+function saveContacts() {
+  localStorage.setItem('tenohira_contacts', JSON.stringify(contacts));
+}
+
+function openContacts() {
+  renderContacts();
+  document.getElementById('contactsModal').classList.add('open');
+  speak('電話帳を開きました。連絡先を選んでください。');
+}
+
+function closeContacts() {
+  document.getElementById('contactsModal').classList.remove('open');
+}
+
+function renderContacts() {
+  const list = document.getElementById('contactsList');
+  list.innerHTML = '';
+  contacts.forEach(c => {
+    const el = document.createElement('div');
+    el.className = 'contact-item';
+    el.innerHTML = `
+      <div class="contact-avatar">${c.emoji||'👤'}</div>
+      <div class="contact-info">
+        <div class="contact-name">${c.name}</div>
+        <div class="contact-rel">${c.rel}</div>
+        <div class="contact-num">${c.number || '番号未登録'}</div>
+      </div>
+      <div class="contact-actions">
+        ${c.number ? `<button class="c-btn" onclick="callContact(${c.id})">📞 電話</button>` : ''}
+        ${c.number ? `<button class="c-btn sms" onclick="smsContact(${c.id})">💬 SMS</button>` : ''}
+        <button class="c-btn" onclick="editContact(${c.id})">✏️</button>
+      </div>`;
+    list.appendChild(el);
+  });
+}
+
+function callContact(id) {
+  const c = contacts.find(x=>x.id===id);
+  if (!c || !c.number) { alert('電話番号を登録してください'); return; }
+  speak(c.name + 'に電話します。');
+  setTimeout(() => launchApp('call', {number: c.number.replace(/[-()\s]/g,'')}), 1000);
+  closeContacts();
+}
+
+function smsContact(id) {
+  const c = contacts.find(x=>x.id===id);
+  if (!c || !c.number) { alert('電話番号を登録してください'); return; }
+  const body = `てのひらアプリからのメッセージです。現在地: ${addr||'不明'}`;
+  speak(c.name + 'にメッセージを送ります。');
+  launchApp('sms', {number: c.number.replace(/[-()\s]/g,''), body});
+  closeContacts();
+}
+
+function editContact(id) {
+  const c = contacts.find(x=>x.id===id);
+  if (!c) return;
+  const num = prompt(`${c.name}の電話番号を入力してください:`, c.number);
+  if (num !== null) {
+    c.number = num;
+    saveContacts();
+    renderContacts();
+  }
+}
+
+function toggleAddForm() {
+  const f = document.getElementById('addForm');
+  f.classList.toggle('open');
+}
+
+function saveContact() {
+  const name = document.getElementById('newName').value.trim();
+  const rel  = document.getElementById('newRel').value.trim();
+  const num  = document.getElementById('newNum').value.trim();
+  if (!name) { alert('名前を入力してください'); return; }
+  contacts.push({ id: Date.now(), name, rel, number: num, emoji: '👤' });
+  saveContacts();
+  document.getElementById('newName').value = '';
+  document.getElementById('newRel').value = '';
+  document.getElementById('newNum').value = '';
+  document.getElementById('addForm').classList.remove('open');
+  renderContacts();
+  speak(name + 'を電話帳に追加しました。');
+}
+
+// 音声で家族を指定して電話
+function callByVoice(q) {
+  const keywords = [
+    { pattern:/お?母|ママ|mom/i,   rel:'母' },
+    { pattern:/お?父|パパ|dad/i,   rel:'父' },
+    { pattern:/兄|お兄/i,          rel:'兄' },
+    { pattern:/姉|お姉/i,          rel:'姉' },
+    { pattern:/弟/i,               rel:'弟' },
+    { pattern:/妹/i,               rel:'妹' },
+    { pattern:/祖母|おばあ|ばあちゃ/i, rel:'祖母' },
+    { pattern:/祖父|おじい|じいちゃ/i, rel:'祖父' },
+    { pattern:/かかりつけ|医者|病院/i,  rel:'病院' },
+    { pattern:/緊急連絡/i,          rel:'緊急連絡先' },
+  ];
+  for (const kw of keywords) {
+    if (kw.pattern.test(q)) {
+      const c = contacts.find(x => x.rel.includes(kw.rel) || x.name.includes(kw.rel));
+      if (c) {
+        if (c.number) {
+          callContact(c.id); return true;
+        } else {
+          aiSay(c.name + 'の電話番号が登録されていません。電話帳から番号を登録してください。');
+          setTimeout(openContacts, 2000); return true;
+        }
+      }
+    }
+  }
+  return false;
+}
 
 // ===== スマホアプリ起動 =====
 function launchApp(type, params) {
@@ -410,6 +562,16 @@ async function sendMsg(text) {
   setOrbState('speaking');
 
   // ===== 音声コマンド→アプリ操作 =====
+
+  // 電話帳を開く
+  if (/電話帳|連絡先|アドレス帳/.test(q)) {
+    openContacts(); setOrbState('idle'); schedNext(); return;
+  }
+
+  // 家族・知人への電話
+  if (/[お母父兄姉弟妹ばあじい].*電話|電話.*[お母父兄姉弟妹]|家族.*電話|電話.*家族|かかりつけ.*電話/.test(q)) {
+    if (callByVoice(q)) { setOrbState('idle'); schedNext(); return; }
+  }
 
   // 電話番号直接指定
   if (detectAndCall(q)) { setOrbState('idle'); schedNext(); return; }
@@ -769,5 +931,31 @@ function setTab(btn, id) {
   document.getElementById('tab-'+id).classList.add('active');
 }
 </script>
+
+<!-- 電話帳モーダル -->
+<div class="contacts-modal" id="contactsModal">
+  <div class="contacts-sheet">
+    <div class="contacts-header">
+      <div class="contacts-title">📱 電話帳</div>
+      <button class="contacts-close" onclick="closeContacts()">✕</button>
+    </div>
+
+    <!-- 連絡先追加フォーム -->
+    <div class="add-form" id="addForm">
+      <div style="font-size:0.8rem;color:var(--muted);margin-bottom:10px;">新しい連絡先を追加</div>
+      <input class="form-input" id="newName" placeholder="名前（例：お母さん）"/>
+      <input class="form-input" id="newRel" placeholder="関係（例：母・父・兄・緊急連絡先）"/>
+      <input class="form-input" id="newNum" placeholder="電話番号（例：090-1234-5678）" type="tel"/>
+      <div class="form-row">
+        <button class="c-btn" style="flex:1" onclick="saveContact()">✅ 保存</button>
+        <button class="c-btn" style="flex:1" onclick="toggleAddForm()">キャンセル</button>
+      </div>
+    </div>
+
+    <div id="contactsList"></div>
+    <button class="add-contact-btn" onclick="toggleAddForm()">＋ 連絡先を追加</button>
+  </div>
+</div>
+
 </body>
 </html>
